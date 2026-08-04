@@ -17,7 +17,7 @@ Last updated: 2026-08-04
 
 | Component | Status | Notes |
 |---|---|---|
-| `core/face_detector.py` | Implemented, not yet validated | `detect_faces(frame) -> list[(x,y,w,h)]` via MediaPipe `solutions.face_detection`. Compiles/imports; detection path unvalidated in this env — see ISSUE-001 |
+| `core/face_detector.py` | Implemented, not yet validated | `detect_faces(frame) -> list[(x,y,w,h)]` via MediaPipe `solutions.face_detection`. Guard paths tested (`tests/test_face_detector.py`); single-face detection test written but SKIPS here — see ISSUE-001 |
 | `core/ocr_detector.py` | Not implemented | Stub only |
 | `core/pii_matcher.py` | Not implemented | EMAIL regex stubbed in, PHONE/CARD/IP not yet written |
 | `core/redactor.py` | Not implemented | Stub only |
@@ -40,7 +40,7 @@ Last updated: 2026-08-04
 
 *(Mirror the high-level summary here; full detail lives in known-issues.md. Keep this list short — just enough to orient a new session.)*
 
-- Installed `mediapipe` in this environment is an anomalous 1.0.0 exposing only the Tasks API (no `mp.solutions`), so the `face_detector` detection path cannot execute here. Code targets standard MediaPipe 0.10.x per D5. See ISSUE-001.
+- Installed `mediapipe` in this sandbox ships stub wheels exposing only the Tasks API (no `mp.solutions`) at every version, so the `face_detector` detection path cannot execute here. Code targets standard MediaPipe 0.10.x per D5; `requirements.txt` pins `mediapipe==0.10.*`. Validate on the real Windows machine. See ISSUE-001.
 
 ---
 

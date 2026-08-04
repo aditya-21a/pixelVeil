@@ -13,7 +13,8 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Phase 1 — Core Pipeline (plain scripts, no GUI yet)
 - [x] `core/face_detector.py` — `detect_faces(frame) -> list[bbox]` using MediaPipe
-- [ ] Test face detector standalone on a still image with 1 face, confirm bbox accuracy
+- [~] Test face detector standalone on a still image with 1 face, confirm bbox accuracy
+  - Test written: `tests/test_face_detector.py` (encodes TESTING.md 3.1). Guard paths pass; single-face detection tests SKIP in this sandbox (ISSUE-001) and need a real MediaPipe 0.10.x + a `tests/assets/single_frontal_face.jpg` fixture to confirm.
 - [ ] Test face detector on a still image with multiple faces
 - [ ] Test face detector on an angled/partial face — confirm known limitation, log behavior
 - [ ] `core/ocr_detector.py` — `detect_text(frame) -> list[(text, bbox)]` using Tesseract
