@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Implement zone_manager.py static zones + unit tests
+- Changed: core/zone_manager.py, tests/test_zone_manager.py (new); docs/current-state.md, tasks.md, development-log.md
+- Why: TASKS.md Phase 1 — store/apply user-defined static redaction zones
+- Result: `ZoneManager` with add/remove/get/clear + `apply_zones(frame, mode="blur"|"box")`. Zones are `(x,y,w,h)` pixel coords; application delegates to core.redactor (no duplicated drawing/clamping). add_zone rejects invalid/zero-area (ValueError). `tests/test_zone_manager.py` — `19 passed, 4 subtests` (0.30s); redactor suite still `14 passed`.
+- Note: canvas→pixel coordinate mapping is deliberately left to the caller/GUI (out of scope per task); fake-data mode not offered for zones (region, not a typed PII value).
+- Commit: uncommitted
+
 ## 2026-08-04 — Implement utils/fake_data.py placeholder generation + unit tests
 - Changed: utils/fake_data.py, tests/test_fake_data.py (new); docs/current-state.md, tasks.md, development-log.md
 - Why: TASKS.md Phase 1 — generate replacement strings for fake-data redaction mode
