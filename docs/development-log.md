@@ -19,6 +19,12 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Validate OCR detector against a real application screenshot
+- Changed: tests/test_ocr_detector.py (added TestOCRDetectorRealScreenshot + os import); docs/current-state.md, tasks.md
+- Why: OCR was only validated on synthetic cv2.putText frames; needed validation against a realistic UI screenshot (tests/assets/ocr_real_screen.png) before moving on
+- Result: `17 passed` (was 10). All 5 planted values read exactly and in-bounds (Name/Email/Phone/IPv4/Card), each in its own box with labels split from values. Representative UI text also detected. Face suite still `9 passed` (no regression). core/ocr_detector.py UNCHANGED — no implementation bug; RapidOCR handled the real screenshot without any threshold/behavior tweaks.
+- Commit: uncommitted
+
 ## 2026-08-04 — OCR backend → RapidOCR (ONNX Runtime); implement + test ocr_detector
 - Changed: core/ocr_detector.py, tests/test_ocr_detector.py (new), requirements.txt (pytesseract→rapidocr+onnxruntime, already staged); docs/decisions.md (D6 superseded, D17 added), architecture.md (§3.2 + diagram + structure + deps), current-state.md, tasks.md
 - Why: TASKS.md Phase 1 OCR detector; backend swapped from planned Tesseract to RapidOCR/ONNX per developer request — pure-pip, offline, bundled ONNX models, good CPU perf for repeated frame OCR (D17)

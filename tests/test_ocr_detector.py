@@ -16,6 +16,7 @@ incidental spaces) rather than demanding an exact transcription; bbox invariants
 (in-bounds, positive area) are always asserted strictly.
 """
 
+import os
 import unittest
 
 import numpy as np
@@ -151,6 +152,174 @@ class TestOCRDetectorNoText(unittest.TestCase):
             self.assertGreaterEqual(y, 0)
             self.assertLessEqual(x + w, 200)
             self.assertLessEqual(y + h, 200)
+
+
+def _digits(s):
+    """Keep only decimal digits — for phone/card comparison, where OCR spacing
+    and grouping (e.g. "4111 1111 1111 1111") is irrelevant to the value."""
+    return "".join(c for c in s if c.isdigit())
+
+
+class TestOCRDetectorRealScreenshot(unittest.TestCase):
+    """Integration test against a realistic PixelVeil dashboard screenshot
+    (`tests/assets/ocr_real_screen.png`), as opposed to the synthetic
+    cv2.putText frames above.
+
+    Unlike the synthetic cases, this fixture has real UI chrome — cards, icons,
+    nav text, mixed font sizes/weights/colours, and text spread across the
+    screen. Labels ("Email:") and their values ("john.doe@example.com") are
+    spatially separate, so RapidOCR returns them as *separate* boxes; the value
+    of a field is never assumed to share a box with its label (per the task's
+    segmentation notes).
+
+    Acceptance is the five planted values (name + 4 PII shapes from TESTING.md
+    3.2); a small subset of UI strings is checked as a general OCR sanity signal
+    only. This runs detect_text(frame) exactly as production code would.
+    """
+
+    # Path is resolved relative to THIS test file, not the shell's CWD, so the
+    # test works regardless of where pytest is invoked from.
+    FIXTURE = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "assets", "ocr_real_screen.png"
+    )
+
+    # Ground-truth planted values (the acceptance criteria).
+    EXPECT_NAME = "John Doe"
+    EXPECT_EMAIL = "john.doe@example.com"
+    EXPECT_PHONE = "9876543210"
+    EXPECT_IPV4 = "192.168.1.105"
+    EXPECT_CARD = "4111 1111 1111 1111"
+
+    # A small representative subset of known UI text — a general OCR sanity
+    # check, NOT an exhaustive transcript of the screenshot.
+    EXPECT_UI = [
+        "PixelVeil Test Account",
+        "Account Information",
+        "Account Settings",
+        "Privacy Configuration",
+    ]
+
+    @classmethod
+    def setUpClass(cls):
+        # Fail loudly if the fixture is missing or unreadable — never skip. A
+        # silent skip would let a broken fixture masquerade as "OCR passed".
+        if not os.path.isfile(cls.FIXTURE):
+            raise FileNotFoundError(
+                f"Required OCR fixture not found: {cls.FIXTURE}. "
+                "This test must not be skipped — the real-screenshot validation "
+                "depends on it."
+            )
+        frame = cv2.imread(cls.FIXTURE)
+        if frame is None or getattr(frame, "size", 0) == 0:
+            raise AssertionError(
+                f"OCR fixture could not be decoded by cv2.imread: {cls.FIXTURE}"
+            )
+        cls.frame = frame
+        # Run OCR exactly as production would — no special params.
+        cls.results = detect_text(frame)
+
+        # Requirement: print every (text, bbox) so real OCR behaviour is
+        # inspectable (visible with `pytest -s`, and on any failure).
+        fh, fw = frame.shape[:2]
+        print(f"\n[ocr_real_screen] frame={fw}x{fh}  detections={len(cls.results)}")
+        for text, bbox in cls.results:
+            print(f"  {bbox}  {text!r}")
+
+    def _blob(self):
+        """All detected text as one lowercased, whitespace-stripped string.
+
+        Whitespace is normalised away (so label/value box splits and OCR
+        spacing don't matter) but punctuation is preserved, so email/IPv4
+        assertions still require the '.', '@' etc. to have been read correctly.
+        """
+        return _normalize(" ".join(t for t, _ in self.results))
+
+    def _all_digits(self):
+        return _digits(self._blob())
+
+    def _find(self, predicate):
+        """Return the first (text, bbox) whose text satisfies `predicate`, else
+        None — used to report the actual OCR box backing each planted value."""
+        for text, bbox in self.results:
+            if predicate(text):
+                return (text, bbox)
+        return None
+
+    # -- bbox invariants ---------------------------------------------------
+
+    def test_all_bboxes_in_bounds(self):
+        """Every returned bbox must be in-frame with positive area, so
+        downstream code can slice frame[y:y+h, x:x+w] without bounds checks."""
+        fh, fw = self.frame.shape[:2]
+        self.assertIsInstance(self.results, list)
+        self.assertGreater(len(self.results), 0, "no text detected at all")
+        for text, bbox in self.results:
+            self.assertIsInstance(text, str)
+            x, y, w, h = bbox
+            self.assertGreaterEqual(x, 0, f"x<0 for {text!r}")
+            self.assertGreaterEqual(y, 0, f"y<0 for {text!r}")
+            self.assertGreater(w, 0, f"w<=0 for {text!r}")
+            self.assertGreater(h, 0, f"h<=0 for {text!r}")
+            self.assertLessEqual(x + w, fw, f"x+w>{fw} for {text!r}")
+            self.assertLessEqual(y + h, fh, f"y+h>{fh} for {text!r}")
+
+    # -- planted PII (acceptance criteria) ---------------------------------
+
+    def test_name_detected(self):
+        target = _normalize(self.EXPECT_NAME)  # 'johndoe'
+        hit = self._find(lambda t: target in _normalize(t))
+        self.assertIsNotNone(
+            hit,
+            f"Name {self.EXPECT_NAME!r} not found. Closest blob: {self._blob()!r}",
+        )
+        self.assertIn(target, self._blob())
+
+    def test_email_detected(self):
+        # Punctuation-preserving check: the exact '.'/'@' structure must be read.
+        target = self.EXPECT_EMAIL.lower()
+        hit = self._find(lambda t: target in _normalize(t))
+        self.assertIsNotNone(
+            hit,
+            f"Email {self.EXPECT_EMAIL!r} not found. Closest blob: {self._blob()!r}",
+        )
+        self.assertIn(target, self._blob())
+
+    def test_phone_detected(self):
+        # Digits-only comparison — grouping/spacing is irrelevant to the value.
+        hit = self._find(lambda t: self.EXPECT_PHONE in _digits(t))
+        self.assertIsNotNone(
+            hit,
+            f"Phone {self.EXPECT_PHONE!r} not found. Digits seen: {self._all_digits()!r}",
+        )
+        self.assertIn(self.EXPECT_PHONE, self._all_digits())
+
+    def test_ipv4_detected(self):
+        # Punctuation-preserving: the dotted-quad structure must be read exactly.
+        target = self.EXPECT_IPV4.lower()
+        hit = self._find(lambda t: target in _normalize(t))
+        self.assertIsNotNone(
+            hit,
+            f"IPv4 {self.EXPECT_IPV4!r} not found. Closest blob: {self._blob()!r}",
+        )
+        self.assertIn(target, self._blob())
+
+    def test_credit_card_detected(self):
+        target = _digits(self.EXPECT_CARD)  # '4111111111111111'
+        hit = self._find(lambda t: target in _digits(t))
+        self.assertIsNotNone(
+            hit,
+            f"Card {self.EXPECT_CARD!r} not found. Digits seen: {self._all_digits()!r}",
+        )
+        self.assertIn(target, self._all_digits())
+
+    # -- representative UI sanity check ------------------------------------
+
+    def test_representative_ui_text(self):
+        blob = self._blob()
+        missing = [ui for ui in self.EXPECT_UI if _normalize(ui) not in blob]
+        self.assertEqual(
+            missing, [], f"Representative UI text missing from OCR: {missing}"
+        )
 
 
 if __name__ == "__main__":
