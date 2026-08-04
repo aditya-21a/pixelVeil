@@ -14,22 +14,22 @@ app = Flask(__name__)
 
 @app.route("/")
 def upload():
-    return render_template("upload.html")
+    return render_template("upload.html", active="upload")
 
 
 @app.route("/processing")
 def processing():
-    return render_template("processing.html")
+    return render_template("processing.html", active="processing")
 
 
 @app.route("/results")
 def results():
-    return render_template("results.html")
+    return render_template("results.html", active="results")
 
 
 @app.route("/settings")
 def settings():
-    return render_template("settings.html")
+    return render_template("settings.html", active="settings")
 
 
 if __name__ == "__main__":

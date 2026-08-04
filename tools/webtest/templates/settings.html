@@ -1,12 +1,39 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>PixelVeil — Settings</title>
-  <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-  <!-- Settings screen — see docs/design.md Screen 4 for layout spec -->
-  <h1>PixelVeil — Settings</h1>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<!-- Screen 4 — Settings (design.md 2.4). Static placeholders only:
+     values are display defaults; editing/persistence is a later Phase 3 task. -->
+<h1>Settings</h1>
+<p class="lede">Tuning knobs for testing — not end-user settings. Defaults shown;
+  saving is wired in a later task.</p>
+
+<section class="card">
+  <h2>OCR sampling rate</h2>
+  <label class="field">Sample every
+    <input type="number" value="1" min="1" disabled> frames
+  </label>
+</section>
+
+<section class="card">
+  <h2>Face detection confidence</h2>
+  <label class="field">Threshold
+    <input type="range" min="0" max="1" step="0.05" value="0.5" disabled>
+    <span class="muted">0.50</span>
+  </label>
+</section>
+
+<section class="card">
+  <h2>PII regex patterns</h2>
+  <ul class="patterns">
+    <li>email</li>
+    <li>phone</li>
+    <li>credit card</li>
+    <li>IP address</li>
+  </ul>
+  <p class="muted">Editable list comes in a later task.</p>
+</section>
+
+<button class="btn primary" disabled>Save</button>
+<button class="btn" disabled>Reset to defaults</button>
+{% endblock %}

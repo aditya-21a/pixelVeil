@@ -1,12 +1,32 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>PixelVeil — Results</title>
-  <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-  <!-- Results screen — see docs/design.md Screen 3 for layout spec -->
-  <h1>PixelVeil — Results</h1>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Results{% endblock %}
+
+{% block content %}
+<!-- Screen 3 — Results (design.md 2.3). Static placeholders only:
+     before/after playback, real counts, download, and issue logging are
+     wired in later Phase 3 tasks, not here. -->
+<h1>Results</h1>
+<p class="lede">Compare the original and redacted video, review what was caught,
+  and download the output.</p>
+
+<section class="card">
+  <h2>Before / after</h2>
+  <div class="before-after">
+    <div class="placeholder-box preview">Original video</div>
+    <div class="placeholder-box preview">Redacted output</div>
+  </div>
+  <p class="muted">Video players load here after a run.</p>
+</section>
+
+<section class="card">
+  <h2>Summary</h2>
+  <ul class="summary">
+    <li>Faces blurred: <strong>—</strong></li>
+    <li>PII matches: <strong>—</strong> (emails —, phones —, cards —, IPs —)</li>
+    <li>Static zones applied: <strong>—</strong></li>
+  </ul>
+</section>
+
+<button class="btn primary" disabled>Download output video</button>
+<button class="btn" disabled>Flag an issue</button>
+{% endblock %}

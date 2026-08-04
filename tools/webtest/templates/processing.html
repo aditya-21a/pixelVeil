@@ -1,12 +1,44 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>PixelVeil — Processing</title>
-  <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-  <!-- Processing screen — see docs/design.md Screen 2 for layout spec -->
-  <h1>PixelVeil — Processing</h1>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Processing{% endblock %}
+
+{% block content %}
+<!-- Screen 2 — Processing (design.md 2.2). Static placeholders only:
+     live progress, per-stage counts, log streaming, and frame preview are
+     wired in later Phase 3 tasks, not here. -->
+<h1>Processing</h1>
+<p class="lede">A live debug console for the pipeline — progress, per-stage
+  status, a scrolling log, and the current frame with detection boxes.</p>
+
+<section class="card">
+  <h2>Overall progress</h2>
+  <div class="progress"><div class="progress-fill" style="width: 0%"></div></div>
+  <p class="muted">Frame 0 of 0 · elapsed 00:00 · idle</p>
+</section>
+
+<section class="card">
+  <h2>Pipeline stages</h2>
+  <table class="stages">
+    <thead><tr><th>Stage</th><th>State</th><th>Count</th></tr></thead>
+    <tbody>
+      <tr><td>face_detector</td><td class="state idle">idle</td><td>—</td></tr>
+      <tr><td>ocr_detector</td><td class="state idle">idle</td><td>—</td></tr>
+      <tr><td>pii_matcher</td><td class="state idle">idle</td><td>—</td></tr>
+      <tr><td>zone_manager</td><td class="state idle">idle</td><td>—</td></tr>
+      <tr><td>redactor</td><td class="state idle">idle</td><td>—</td></tr>
+      <tr><td>video writer / ffmpeg mux</td><td class="state idle">idle</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Technical log</h2>
+  <pre class="log">[--:--:--] waiting for a job — log streaming wired in a later task</pre>
+</section>
+
+<section class="card">
+  <h2>Current frame</h2>
+  <div class="placeholder-box preview">Frame preview with face / PII / zone boxes appears here during processing.</div>
+</section>
+
+<button class="btn" disabled>Cancel</button>
+{% endblock %}

@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-05 — Phase 3: Flask test-harness skeleton serves 4 screens
+- Changed: tools/webtest/templates/base.html (new), upload/processing/results/settings.html, static/css/style.css, server.py; docs/current-state.md, tasks.md, development-log.md
+- Why: TASKS.md Phase 3 first item — minimal Flask app skeleton serving Upload/Processing/Results/Settings, building on the existing tools/webtest/ skeleton (not a second app)
+- Result: added `base.html` (top nav, 4 tabs, active-state highlight, single-column per design.md §3); the 4 screens now extend it with static placeholder content for their purpose (design.md §2), all controls `disabled`. `style.css` expanded to the design.md §1 light theme (system font, one blue accent, thin gray borders, mono log panel only). `server.py` passes an `active` tab var; route paths unchanged. Flask test client: all 4 routes HTTP 200, nav works, cross-links resolve. Core suite `python -m pytest tests/test_*.py` → `113 passed` (no core/ touched — module boundary respected). No new dependencies.
+- Note: intentionally UI-only — upload/zone-drawing/pipeline-wiring/progress-streaming/log/preview/playback/download/issue-log/settings-persistence are later Phase 3 tasks, left unimplemented (placeholders). No new decision (routine implementation following design.md).
+- Commit: uncommitted
+
 ## 2026-08-04 — Phase 2 end-to-end acceptance validation
 - Changed: tests/phase2_validate.py (new reporting harness); docs/current-state.md, tasks.md, known-issues.md, development-log.md
 - Why: TASKS.md Phase 2 — run the REAL process_video() (no mocks) on all 5 fixtures, record every miss honestly before any UI work

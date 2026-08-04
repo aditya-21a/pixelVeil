@@ -2,13 +2,13 @@
 
 **This file describes what actually works right now — not what's planned, not what's in progress. If it's not implemented and tested, it's not listed here as working.** Read this before `TASKS.md` to know where the project actually stands.
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 ---
 
 ## Overall Status
 
-`v1 — Phase 2 (Pipeline Validation)`
+`v1 — Phase 3 (Test Harness UI)`
 *(update this line as phases in TASKS.md complete: Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5)*
 
 ---
@@ -24,7 +24,7 @@ Last updated: 2026-08-04
 | `core/zone_manager.py` | Implemented & tested | `ZoneManager` stores `(x,y,w,h)` pixel-coord zones (add/remove/get/clear) and `apply_zones(frame, mode)` redacts them every frame by reusing `redactor` (blur/box). `tests/test_zone_manager.py` — `19 passed`. Not yet wired into the pipeline. |
 | `core/video_pipeline.py` | Implemented & tested (orchestration + OCR sampling + audio mux) | `process_video(input_path, output_path, mode="blur"\|"fake_data", zones=None, ocr_sample_rate=1, progress_callback=None) -> summary dict`. Ties together face_detector, ocr_detector, pii_matcher, redactor, ZoneManager, fake_data via their existing public APIs (no duplicated logic). Per frame: detect faces → (OCR + classify **only on every Nth frame**, persisted between samples) → **faces always blurred** → PII redacted per mode (blur, or fake_data.generate()→fake_data_region()) → static zones → write. Frames go to a temp video-only intermediate (OpenCV), then **ffmpeg (imageio-ffmpeg) re-muxes the original audio** into the final output — streams copied, not re-encoded; intermediate always cleaned up (D8). Source without audio → valid video-only output. `ocr_sample_rate` functional; faces + zones every frame; fake-data value persisted per sample (D18). Preserves dims/FPS; releases OpenCV resources in `finally`. `tests/test_video_pipeline.py` — `27 passed, 12 subtests`. ffmpeg mux failure → `RuntimeError`. Non-mp4-copyable audio codec limitation: ISSUE-004. Between-samples moving-text miss: ISSUE-003. |
 | `utils/fake_data.py` | Implemented & tested | `generate(pii_type)` returns a clearly-synthetic placeholder for "EMAIL"/"PHONE"/"CARD"/"IP" (matches pii_matcher's types; name not supported per D7). stdlib `random` only. Reserved/documentation ranges so values are never real. `tests/test_fake_data.py` — `11 passed`. Not yet wired into the pipeline. |
-| `webtest/server.py` | Skeleton working | Flask routes serve empty template pages, not wired to pipeline yet |
+| `tools/webtest/server.py` | Skeleton + 4 screens (UI only, not wired) | Flask serves 4 screens via a shared `templates/base.html` (top nav, active-tab highlight, single-column per design.md §3): `/`→Upload, `/processing`, `/results`, `/settings`. Each page shows **static placeholder content** for its purpose (design.md §2) with all controls `disabled`; `style.css` implements the design.md §1 light theme. All 4 routes return HTTP 200 (Flask test client); nav works. **Not wired to the pipeline** — no upload/processing/zones/streaming/log/preview/playback/download/issue-log/settings-persistence yet (later Phase 3 tasks). No new deps. |
 | `gui/app.py` | Not started | Blocked on core pipeline validation (see TASKS.md Phase 2 gate) |
 | `tests/sample_videos/*.mp4` | Phase 2 fixtures generated + acceptance-validated | 5 deterministic fixtures built by `tests/make_sample_videos.py`. End-to-end validated 2026-08-04 via `tests/phase2_validate.py` (real `process_video`, no mocks): static faces/PII/zone pass ~100%; moving-ticker miss quantified (ISSUE-003). Git-ignored (regenerate, don't commit). |
 | Packaging (PyInstaller) | Not started | Blocked on GUI |
