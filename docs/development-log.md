@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — OpenCV intermediate → ffmpeg audio mux in video_pipeline.py
+- Changed: core/video_pipeline.py, tests/test_video_pipeline.py; docs/current-state.md, tasks.md, known-issues.md, development-log.md
+- Why: TASKS.md Phase 1 (final core-pipeline task) — attach the original audio to the redacted output per D8
+- Result: frames now write to a temp video-only intermediate (`tempfile.mkstemp` next to output), then `_mux_audio()` runs bundled ffmpeg (`imageio_ffmpeg.get_ffmpeg_exe()`, existing dep) via a `subprocess.run` arg list (no shell) to mux processed video + original audio into `output_path`. `-c:v copy -c:a copy` (no re-encode), `-map 1:a:0?` (optional audio → no-audio sources still valid), `-shortest`. ffmpeg non-zero exit → RuntimeError(stderr); intermediate removed in `finally` on all paths. API/sampling/persistence/redaction/zones/summary/progress unchanged. `tests/test_video_pipeline.py` — `27 passed, 12 subtests`; regression `60 passed`.
+- Note: added ISSUE-004 (no audio re-encode fallback — copy-into-mp4 only in v1). No new dependency (imageio-ffmpeg already in requirements). Approach follows D8; no new decision. This completes Phase 1 core-pipeline implementation; Phase 2 validation not started.
+- Commit: uncommitted
+
 ## 2026-08-04 — OCR frame-sampling + PII bbox persistence in video_pipeline.py
 - Changed: core/video_pipeline.py, tests/test_video_pipeline.py; docs/current-state.md, tasks.md, known-issues.md, DECISIONS.md, development-log.md
 - Why: TASKS.md Phase 1 — make `ocr_sample_rate` functional; run OCR every Nth frame, persist PII detections between samples (architecture.md 6.4–6.5, 7)

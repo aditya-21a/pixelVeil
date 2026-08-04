@@ -23,12 +23,20 @@ re-running OCR. This avoids both wasted computation and visual flicker in the
 output. `ocr_sample_rate=1` reproduces "OCR on every frame". Face detection and
 static zones still run on every frame regardless of the OCR sample rate.
 
-Scope note (this task): the output is the OpenCV-written intermediate video
-(video only). One follow-on TASKS.md item is deliberately NOT implemented here:
-  * ffmpeg re-mux of the original audio track (architecture.md 6.9, D8).
+Output (architecture.md 6.8/6.9, DECISIONS.md D8): processed frames are written
+to a temporary video-only intermediate via OpenCV, then ffmpeg (bundled with
+`imageio-ffmpeg`) re-muxes that video with the **original** audio track into the
+final `output_path`. Both streams are copied, not re-encoded. The intermediate
+is always removed, on success and on failure. A source with no audio still
+produces a valid video-only output.
 """
 
+import os
+import subprocess
+import tempfile
+
 import cv2
+import imageio_ffmpeg
 
 from core import face_detector
 from core import ocr_detector
@@ -58,6 +66,43 @@ def _classify_pii(text):
     return None
 
 
+def _mux_audio(processed_video_path, source_path, output_path):
+    """Combine the processed (video-only) stream with the source's audio.
+
+    Muxes the video stream from `processed_video_path` (the OpenCV-written
+    intermediate) with the audio stream from the original `source_path` into
+    `output_path`, using the ffmpeg binary bundled with `imageio-ffmpeg`
+    (DECISIONS.md D8). Streams are copied, not re-encoded — the processed video
+    is preserved exactly and the original audio is preserved without
+    reprocessing. The audio mapping is optional (``1:a:0?``) so a source with no
+    audio track still produces a valid video-only output.
+
+    Args are passed to ffmpeg as a subprocess argument list (never a shell
+    string). Raises RuntimeError with ffmpeg's stderr on a non-zero exit.
+    """
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    args = [
+        ffmpeg_exe,
+        "-y",                 # overwrite output without prompting
+        "-nostdin",           # never block waiting on stdin
+        "-loglevel", "error",
+        "-i", processed_video_path,   # input 0: processed video
+        "-i", source_path,            # input 1: original (audio source)
+        "-map", "0:v:0",              # video from the processed stream
+        "-map", "1:a:0?",             # audio from the original, if it exists
+        "-c:v", "copy",               # keep processed video exactly as written
+        "-c:a", "copy",               # preserve original audio, no re-encode
+        "-shortest",                  # guard against audio outlasting the video
+        output_path,
+    ]
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "ffmpeg audio mux failed (exit "
+            f"{result.returncode}): {result.stderr.strip()}"
+        )
+
+
 def process_video(
     input_path,
     output_path,
@@ -77,7 +122,9 @@ def process_video(
 
     Args:
         input_path: path to the source video file.
-        output_path: path to write the redacted (video-only) intermediate.
+        output_path: path to write the final redacted video. Frames are first
+            written to a temporary video-only intermediate, then ffmpeg re-muxes
+            the original audio from `input_path` into `output_path` (D8).
         mode: "blur" (PII regions blurred) or "fake_data" (PII regions covered
             and overwritten with a generated placeholder). Faces are always
             blurred regardless of mode.
@@ -99,6 +146,7 @@ def process_video(
     Raises:
         ValueError: if `mode` is invalid, `ocr_sample_rate` is not a positive
             integer, or the input video cannot be opened.
+        RuntimeError: if the ffmpeg audio-mux step fails.
     """
     if mode not in ("blur", "fake_data"):
         raise ValueError(f"mode must be 'blur' or 'fake_data', got {mode!r}")
@@ -126,7 +174,18 @@ def process_video(
     }
 
     writer = None
+    intermediate_path = None
     try:
+        # Processed frames go to a temporary video-only file next to the final
+        # output (same filesystem); ffmpeg later muxes the original audio into
+        # `output_path`. Created after the input opened so a bad input never
+        # leaves a stray temp file behind.
+        out_dir = os.path.dirname(os.path.abspath(output_path))
+        fd, intermediate_path = tempfile.mkstemp(
+            prefix="pixelveil_", suffix=".mp4", dir=out_dir
+        )
+        os.close(fd)
+
         fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
         if fps <= 0:
             # Some containers report 0 fps; fall back to a sane default so the
@@ -134,7 +193,8 @@ def process_video(
             fps = 25.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         # mp4v is broadly compatible for the OpenCV intermediate; the final
-        # container/codec choice belongs to the deferred ffmpeg mux step (D8).
+        # container is produced by the ffmpeg mux step (D8), which copies this
+        # video stream unchanged and attaches the original audio.
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 
         # PII regions carried over from the most recent OCR sample. Each entry
@@ -153,10 +213,13 @@ def process_video(
 
             height, width = frame.shape[:2]
             if writer is None:
-                writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+                writer = cv2.VideoWriter(
+                    intermediate_path, fourcc, fps, (width, height)
+                )
                 if not writer.isOpened():
                     raise ValueError(
-                        f"could not open output video for writing: {output_path!r}"
+                        "could not open intermediate video for writing: "
+                        f"{intermediate_path!r}"
                     )
 
             # 1. faces — detected on every frame (existing pipeline behavior)
@@ -211,9 +274,23 @@ def process_video(
                         "pii": len(persisted_pii),
                     }
                 )
+
+        # Finalize the intermediate (flush + close) before ffmpeg reads it.
+        if writer is not None:
+            writer.release()
+            writer = None
+
+        # Mux only if frames were actually written; an empty intermediate is
+        # not a valid input for ffmpeg and yields no output.
+        if summary["frames_processed"] > 0:
+            _mux_audio(intermediate_path, input_path, output_path)
     finally:
         cap.release()
         if writer is not None:
             writer.release()
+        # Remove the intermediate on every path — success, mux failure, or an
+        # error mid-processing — so no temp file is ever left behind.
+        if intermediate_path is not None and os.path.exists(intermediate_path):
+            os.remove(intermediate_path)
 
     return summary

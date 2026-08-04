@@ -21,6 +21,15 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 
 ## Open Issues
 
+### ISSUE-004 — Audio not copyable into MP4 fails the mux (no re-encode fallback)
+- **Status:** Open (accepted v1 limitation)
+- **Severity:** Minor
+- **Affected files:** `core/video_pipeline.py`
+- **Description:** The ffmpeg mux step copies the original audio stream unchanged (`-c:a copy`) to preserve it without reprocessing (D8, "where practical"). If the source audio is in a codec the MP4 container can't hold via stream copy (uncommon for screen recorders, which use AAC/MP4), ffmpeg exits non-zero and `process_video()` raises `RuntimeError`; there is intentionally **no automatic re-encode fallback** in v1. The processed video work is not lost silently — the failure is explicit and the temp intermediate is cleaned up — but no output file is produced in that case.
+- **Reproduction:** feed a source whose audio codec is incompatible with MP4 stream-copy (e.g. some PCM/vorbis-in-mkv inputs) and observe the `RuntimeError` from the mux.
+- **Workaround:** none automatic in v1. A future `-c:a aac` fallback (re-encode only when copy fails) is the obvious fix; deferred until Phase 2 shows it's actually hit with real recordings. Target inputs (OBS/Loom/QuickTime MP4) are AAC and copy cleanly.
+- **Notes:** Deliberately not implemented now to keep the mux path simple and avoid re-encoding audio unnecessarily (quality/time cost) for the common case. Revisit if Phase 2 validation surfaces real inputs that trip it.
+
 ### ISSUE-003 — PII moving/scrolling between OCR samples can be missed or mis-placed
 - **Status:** Open (accepted v1 tradeoff, by design)
 - **Severity:** Minor
