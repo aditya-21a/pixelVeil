@@ -2,32 +2,46 @@
 {% block title %}Upload{% endblock %}
 
 {% block content %}
-<!-- Screen 1 — Upload (design.md 2.1). Static placeholders only:
-     drag-drop, mode toggle, zone drawing, and Process are wired in later
-     Phase 3 tasks, not here. -->
+<!-- Screen 1 — Upload (design.md 2.1). File picker + drag/drop, mode toggle,
+     and click-drag static-zone drawing on the first frame. The Process Video
+     button is wired to a controlled placeholder only — actual pipeline wiring
+     is the next Phase 3 task. Behaviour lives in static/js/app.js. -->
 <h1>Upload</h1>
 <p class="lede">Pick a screen recording to redact, choose a redaction mode, and
-  (once a video is loaded) mark any always-redact zones.</p>
+  (once a video is loaded) mark any always-redact zones on the first frame.</p>
 
 <section class="card">
-  <div class="dropzone" aria-disabled="true">
+  <div id="dropzone" class="dropzone" role="button" tabindex="0"
+       aria-label="Choose or drop a video file">
     <p class="dropzone-title">Drag &amp; drop a video here</p>
-    <p class="muted">or click to browse — <em>upload wiring comes in a later task</em></p>
+    <p class="muted">or click to browse</p>
   </div>
+  <input id="fileInput" type="file" accept="video/*,.mp4,.mov,.mkv,.avi,.webm,.m4v" hidden>
+  <p id="uploadError" class="error-msg" role="alert" hidden></p>
+  <p id="uploadInfo" class="muted" hidden></p>
 </section>
 
 <section class="card">
   <h2>Redaction mode</h2>
-  <label class="radio"><input type="radio" name="mode" value="blur" checked disabled> Blur</label>
-  <label class="radio"><input type="radio" name="mode" value="fake_data" disabled> Replace with fake data</label>
+  <label class="radio"><input type="radio" name="mode" value="blur" checked> Blur</label>
+  <label class="radio"><input type="radio" name="mode" value="fake_data"> Replace with fake data</label>
 </section>
 
 <section class="card">
   <h2>Static redaction zones</h2>
-  <div class="placeholder-box">First frame + click-drag zone tool appears here once a video is loaded.</div>
-  <p class="muted">No zones drawn.</p>
+  <div id="zoneEditor" hidden>
+    <p class="muted">Click and drag on the frame to mark a region to always redact.</p>
+    <div class="canvas-wrap">
+      <canvas id="frameCanvas"></canvas>
+    </div>
+    <ul id="zoneList" class="zone-list"></ul>
+    <p id="zoneEmpty" class="muted">No zones drawn.</p>
+  </div>
+  <div id="zonePlaceholder" class="placeholder-box">
+    First frame + click-drag zone tool appears here once a video is loaded.
+  </div>
 </section>
 
-<button class="btn primary" disabled>Process Video</button>
-<p class="muted">Disabled until a file is loaded (later task).</p>
+<button id="processBtn" class="btn primary" disabled>Process Video</button>
+<p id="processStatus" class="muted">Disabled until a valid video is loaded.</p>
 {% endblock %}

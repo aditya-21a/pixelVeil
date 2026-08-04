@@ -154,3 +154,32 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 .summary li { padding: 4px 0; }
 .patterns { margin: 0; padding-left: 18px; }
 .patterns li { padding: 2px 0; }
+
+/* --- upload screen --- */
+.dropzone { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.dropzone:hover, .dropzone:focus { border-color: var(--accent); outline: none; }
+.dropzone.dragover { border-color: var(--accent); background: #EFF4FF; }
+
+.error-msg { color: #B91C1C; font-size: 13px; margin: 12px 0 0; }
+
+.canvas-wrap {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  line-height: 0;
+  margin: 8px 0 12px;
+}
+#frameCanvas { max-width: 100%; cursor: crosshair; display: block; }
+
+.zone-list { list-style: none; padding: 0; margin: 0; }
+.zone-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.btn-small { padding: 3px 10px; font-size: 12px; }

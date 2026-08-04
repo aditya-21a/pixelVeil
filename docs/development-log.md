@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-05 — Phase 3: Upload screen — drag/drop upload, first-frame zone drawing, mode toggle
+- Changed: tools/webtest/server.py (Upload API), upload_support.py (new pure helpers), templates/upload.html, static/js/app.js, static/css/style.css, .gitignore (uploads/); tests/test_webtest_upload.py (new); docs/current-state.md, tasks.md, DECISIONS.md, development-log.md
+- Why: TASKS.md Phase 3 — Upload screen: file picker/drag-drop, mode toggle, zone-drawing canvas on first frame (building on the harness skeleton)
+- Result: file-picker + drag/drop upload with two-stage validation (extension allowlist → real OpenCV frame-0 decode); first frame shown on a `<canvas>`, click-drag static zones with per-zone delete; Blur/fake_data toggle persisted. Zones converted display→**original-video-pixel** server-side in `/zone` (D19) and stored as `[x,y,w,h]` directly consumable by `ZoneManager.add_zone()`; per-upload video path/mode/zones kept in process-local `_STATE` for the pipeline-wiring task. `/process` is a controlled **HTTP 501 placeholder** — `process_video()` not called. Pure validation + coord math extracted to `upload_support.py` (no Flask import). Tests: `tests/test_webtest_upload.py` **26 passed**; full suite `python -m pytest tests/test_*.py` → **139 passed, 80 subtests** (+26). core/ untouched.
+- Note: new decision D19 (coordinate conversion done server-side, where the real video dims live, so a resized canvas can't desync the ZoneManager mapping). Deliberately NOT done: pipeline wiring, Processing/Results/Settings behaviour, progress/log/preview, issue logging (later Phase 3 tasks). No new dependency.
+- Commit: uncommitted
+
 ## 2026-08-05 — Phase 3: Flask test-harness skeleton serves 4 screens
 - Changed: tools/webtest/templates/base.html (new), upload/processing/results/settings.html, static/css/style.css, server.py; docs/current-state.md, tasks.md, development-log.md
 - Why: TASKS.md Phase 3 first item — minimal Flask app skeleton serving Upload/Processing/Results/Settings, building on the existing tools/webtest/ skeleton (not a second app)

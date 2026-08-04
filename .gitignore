@@ -10,4 +10,5 @@ tests/sample_videos/*.mp4
 tests/sample_videos/*.mov
 !tests/sample_videos/.gitkeep
 outputs/
+tools/webtest/uploads/
 *.log
