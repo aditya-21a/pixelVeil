@@ -10,10 +10,9 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [ ] Install core deps: `opencv-python`, `mediapipe`, `pytesseract`, `pillow`, `imageio-ffmpeg`
 - [ ] Install Tesseract OCR binary (Windows installer), confirm `pytesseract` can find it
 - [ ] Confirm ffmpeg is accessible (via `imageio-ffmpeg` or system install)
-- [ ] Create `pixelveil/` folder structure per architecture.md
 
 ## Phase 1 — Core Pipeline (plain scripts, no GUI yet)
-- [ ] `core/face_detector.py` — `detect_faces(frame) -> list[bbox]` using MediaPipe
+- [x] `core/face_detector.py` — `detect_faces(frame) -> list[bbox]` using MediaPipe
 - [ ] Test face detector standalone on a still image with 1 face, confirm bbox accuracy
 - [ ] Test face detector on a still image with multiple faces
 - [ ] Test face detector on an angled/partial face — confirm known limitation, log behavior

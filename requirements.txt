@@ -1,6 +1,15 @@
+# Core redaction pipeline
 opencv-python
-mediapipe
+# Pinned to 0.10.x: MediaPipe 1.0.0 removed the legacy `solutions.face_detection`
+# API that core/face_detector.py relies on (see docs/DECISIONS.md D5, ISSUE-001).
+mediapipe==0.10.*
+numpy
 pytesseract
 pillow
 imageio-ffmpeg
+
+# Web test harness (development only — see tools/webtest/)
 flask
+
+# Testing
+pytest
