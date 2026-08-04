@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Implement redactor.py rendering layer + unit tests
+- Changed: core/redactor.py, tests/test_redactor.py (new); docs/current-state.md, tasks.md, development-log.md
+- Why: TASKS.md Phase 1 — draw blur / solid box / fake-data text onto a frame given bboxes
+- Result: Rendering-only module — `blur_region`, `box_region`, `fake_data_region`. Caller supplies bbox + (fake-data) replacement string; no detection/OCR/PII-match/fake-data-generation here. Boxes clamped to frame; edge/partial/zero-area/off-frame safe. `tests/test_redactor.py` — `14 passed, 3 subtests` (0.33s).
+- Note: old stub docstring described an orchestration signature (face_boxes/pii_matches/zones/mode) — that orchestration is video_pipeline.py's job (it knows bbox source + mode), not the rendering layer's. Flagged, not silently overridden.
+- Commit: uncommitted
+
 ## 2026-08-04 — Implement pii_matcher.py regex patterns + unit tests
 - Changed: core/pii_matcher.py, tests/test_pii_matcher.py; docs/current-state.md, tasks.md, development-log.md
 - Why: TASKS.md Phase 1 — regex PII matching (email/phone/card/IPv4) per D7
