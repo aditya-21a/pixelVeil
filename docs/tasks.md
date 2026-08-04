@@ -60,11 +60,16 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
     - `test_mixed.mp4` — `single_frontal_face.jpg` (1 face) + static PII panel (EMAIL `john.doe@example.com`, PHONE `9876543210`) + a **scrolling** bottom ticker carrying CARD `4111 1111 1111 1111` / IP `192.168.1.105` that moves each frame — the intended repro for ISSUE-003 (moving PII between OCR samples). **Audio: yes** (330 Hz sine).
     - `test_zones.mp4` — mock "CRM Workspace" whose left sidebar panel sits at **fixed pixel coords `(x=20, y=70, w=260, h=430)` on every frame** (a moving ticket counter + circle elsewhere prove the panel is static while the rest changes). No PII, no audio — isolates static-zone behavior.
   - Not run yet (next Phase 2 items): full end-to-end pipeline / acceptance scoring, blur-vs-fake-data confirmation, audio-in-sync check.
-- [ ] Run full pipeline end-to-end on each test video
-- [ ] Confirm: all planted faces blurred
-- [ ] Confirm: all planted PII detected and handled (both blur mode and fake-data mode)
-- [ ] Confirm: output video plays correctly with audio intact
-- [ ] Log and review any false negatives/positives — do not proceed to UI until miss rate is understood and acceptable (see TESTING.md acceptance criteria)
+- [x] Run full pipeline end-to-end on each test video
+  - Validated via `tests/phase2_validate.py` (reporting harness — runs the **real** `process_video()`, no mocked detectors/redactors; inspects OUTPUT videos). Ran all 5 fixtures 2026-08-04. Regression suite `python -m pytest tests/test_*.py` → `113 passed`.
+- [x] Confirm: all planted faces blurred
+  - basic: 1/1 face blurred every frame; multi: 3/3 every frame. Face-region Laplacian variance collapses in→out (basic 250→14, multi 235→14, mixed 736→38 ≈ −94%), i.e. heavy blur. NOTE: MediaPipe still *localizes* a blurred face-blob in 60/60 output frames — that is the detector firing on the blur, not an unredacted face (region variance confirms it is blurred). Not a miss/bug; recorded for transparency.
+- [x] Confirm: all planted PII detected and handled (both blur mode and fake-data mode)
+  - `test_pii_text.mp4`: all four planted values (EMAIL/PHONE/IP/CARD) OCR-readable in **0/60** output frames in **both** blur and fake_data modes; pipeline `pii_by_type` = 60 each. Ordinary text ("Acme Admin", "Name: John Doe") was NOT mis-flagged — no false positives on non-PII text.
+- [x] Confirm: output video plays correctly with audio intact
+  - All outputs open in OpenCV; resolution/fps/frame-count/duration preserved (960×540 / 10 fps / 60 f / 6.0 s). Audio present in `test_pii_text`/`test_mixed` outputs, absent for the no-audio sources (correct). Equal source/output duration → sync reasonable (full A/V-sync spot-check is a manual VLC/WMP step per TESTING.md §3.5).
+- [x] Log and review any false negatives/positives — do not proceed to UI until miss rate is understood and acceptable (see TESTING.md acceptance criteria)
+  - **Static content passes at ~100%** (faces, static PII both modes, static zone). **Moving-ticker miss quantified** (ISSUE-003, expected model/sampling limitation, NOT tuned around): moving CARD redacted on 27/60 frames (rate 1) → 25/60 (rate 5); moving IP on 3/60 (rate 1) → 0/60 (rate 5) — fast-scrolling text is only OCR-readable on a subset of frames, so it is only detected/redacted on those frames. Static zone: interior variance 633→0.7 (fully blurred) with adjacent strip 219→221 (untouched), applied 60/60 frames. See known-issues ISSUE-003 (updated with these numbers) and the measurement caveat there.
 
 ## Phase 3 — Test Harness UI (Flask + HTML, per design.md)
 - [ ] Minimal Flask app skeleton, serves 4 screens (Upload / Processing / Results / Settings)

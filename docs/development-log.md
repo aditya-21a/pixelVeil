@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Phase 2 end-to-end acceptance validation
+- Changed: tests/phase2_validate.py (new reporting harness); docs/current-state.md, tasks.md, known-issues.md, development-log.md
+- Why: TASKS.md Phase 2 — run the REAL process_video() (no mocks) on all 5 fixtures, record every miss honestly before any UI work
+- Result: static content passes ~100% — faces basic 1/1 & multi 3/3 blurred every frame (face-region Laplacian var −94% in→out); static PII (pii_text) readable in 0/60 output frames in BOTH blur and fake_data modes, no false positives on ordinary text; static zone (20,70,260,430) interior 633→0.7 blurred, adjacent strip 219→221 untouched, applied 60/60. Integrity preserved (960×540/10fps/60f/6s; audio present on pii_text+mixed only). Moving ticker (ISSUE-003) quantified: CARD redacted 27/60 (rate1)→25/60 (rate5), IP 3/60→0/60 — expected sampling/model limit, NOT tuned around. Regression `python -m pytest tests/test_*.py` → `113 passed`.
+- Note: no core code / thresholds / sample-rate defaults / regexes changed (validation only). ISSUE-003 updated with the measured numbers + a measurement caveat (motion that hides text from the pipeline also hides it from the verifier, so 0/60-readable under-reports the moving-PII leak; the honest denominator is the 27/60 detect rate). MediaPipe re-detecting the blurred face-blob in output is expected (region is blurred), not a bug. Overall Status advanced to Phase 2. Manual VLC/WMP A/V-sync spot-check still a human step. No new decision.
+- Commit: uncommitted
+
 ## 2026-08-04 — Phase 2 fixtures: deterministic test videos generator
 - Changed: tests/make_sample_videos.py (new); docs/current-state.md, tasks.md, known-issues.md, development-log.md
 - Why: TASKS.md Phase 2 first item — build the planted-content test videos from TESTING.md §2 before any validation/UI

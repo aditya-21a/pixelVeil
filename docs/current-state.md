@@ -8,7 +8,7 @@ Last updated: 2026-08-04
 
 ## Overall Status
 
-`v1 — Phase 1 (Core Pipeline)`
+`v1 — Phase 2 (Pipeline Validation)`
 *(update this line as phases in TASKS.md complete: Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5)*
 
 ---
@@ -26,7 +26,7 @@ Last updated: 2026-08-04
 | `utils/fake_data.py` | Implemented & tested | `generate(pii_type)` returns a clearly-synthetic placeholder for "EMAIL"/"PHONE"/"CARD"/"IP" (matches pii_matcher's types; name not supported per D7). stdlib `random` only. Reserved/documentation ranges so values are never real. `tests/test_fake_data.py` — `11 passed`. Not yet wired into the pipeline. |
 | `webtest/server.py` | Skeleton working | Flask routes serve empty template pages, not wired to pipeline yet |
 | `gui/app.py` | Not started | Blocked on core pipeline validation (see TASKS.md Phase 2 gate) |
-| `tests/sample_videos/*.mp4` | Phase 2 fixtures generated (not yet acceptance-run) | 5 deterministic fixtures built by `tests/make_sample_videos.py` (OpenCV frames; imageio-ffmpeg sine audio on 2 of them). 960×540, 10 fps, 6 s each, 167–393 KB. Faces (1 / 3 / 1) and all planted PII sanity-checked as detectable; git-ignored (regenerate, don't commit). See TASKS.md Phase 2 for per-file ground truth. |
+| `tests/sample_videos/*.mp4` | Phase 2 fixtures generated + acceptance-validated | 5 deterministic fixtures built by `tests/make_sample_videos.py`. End-to-end validated 2026-08-04 via `tests/phase2_validate.py` (real `process_video`, no mocks): static faces/PII/zone pass ~100%; moving-ticker miss quantified (ISSUE-003). Git-ignored (regenerate, don't commit). |
 | Packaging (PyInstaller) | Not started | Blocked on GUI |
 
 ---
@@ -38,6 +38,12 @@ Last updated: 2026-08-04
 - TESTING.md 3.1 — face detector, angled/partial face: **CHARACTERIZED** — angled face in `tests/assets/angled_face.jpg` was **missed (0 detected)**, the documented, accepted v1 limitation (ISSUE-002).
 - TESTING.md 3.2 — OCR detector, static text (email/phone/card/IP + UI text): **PASS** (`tests/test_ocr_detector.py`, `17 passed`, RapidOCR 3.9.2 / ONNX Runtime 1.28.0, 2026-08-04). OCR only — PII regex matching is pii_matcher.py's job, tested separately.
 - TESTING.md 3 — output audio track preserved: **PASS (unit level)** (`tests/test_video_pipeline.py::TestProcessVideoAudioMux`, 2026-08-04). ffmpeg (imageio-ffmpeg) re-muxes the source audio into the final output (verified an audio stream is present); a source with no audio yields a valid video-only output; ffmpeg failure surfaces as `RuntimeError` and the temp intermediate is always cleaned up. Full end-to-end audio-in-sync confirmation on real recordings is Phase 2.
+- **TESTING.md 3.1–3.5 — full pipeline end-to-end (Phase 2 acceptance): PASS for all static content; moving-text limitation quantified.** `tests/phase2_validate.py` ran the real `process_video()` (no mocks) on all 5 fixtures 2026-08-04:
+  - Faces — basic 1/1, multi 3/3 blurred every frame; face-region sharpness −94% (Laplacian var in→out). MediaPipe still localizes the *blurred blob* in output (60/60) — the region is blurred, not unredacted (transparency note, not a bug).
+  - PII (static, `test_pii_text.mp4`) — all 4 planted values readable in **0/60** output frames in **both** blur and fake_data modes; no false positives on ordinary UI text.
+  - Zones — interior variance 633→0.7 (fully blurred), adjacent strip 219→221 (untouched), applied 60/60 frames.
+  - Integrity — 960×540 / 10 fps / 60 f / 6.0 s preserved on every output; audio present on the two audio fixtures, absent on the rest.
+  - Moving PII (`test_mixed.mp4`) — static PII fully redacted; scrolling ticker only partially covered (CARD 27/60 @ rate 1, IP 3/60), the accepted ISSUE-003 tradeoff (not tuned around). Manual VLC/WMP A/V-sync spot-check remains a human step.
 
 ---
 

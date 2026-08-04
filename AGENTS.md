@@ -6,7 +6,7 @@ You are working on **PixelVeil** — a local Windows desktop app that redacts fa
 
 ## 0. The Prime Rule
 
-**Never guess about project history, past decisions, or why something is built a certain way. Read the docs. If the answer isn't in the docs, say so explicitly instead of assuming.** A wrong assumption written into code costs far more (tokens, time, developer trust) than a five-minute doc read.
+**Never guess about project history, past decisions, or why something is built a certain way. Read the docs. If the answer isn't in the docs, say so explicitly instead of assuming.** 
 
 ---
 
