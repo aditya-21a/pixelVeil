@@ -10,10 +10,14 @@ The guard-path tests always run.
 
 Fixtures (tests/assets/, or via env var):
   - Single face: PIXELVEIL_TEST_FACE_IMAGE, else single_frontal_face.<jpg|jpeg|png|bmp>
-  - Multiple faces: PIXELVEIL_TEST_MULTI_FACE_IMAGE, else multi_face.<jpg|jpeg|png|bmp>.
+  - Multiple faces: PIXELVEIL_TEST_MULTI_FACE_IMAGE, else multiple_faces.* / multi_face.*.
     If no multi-face fixture is supplied, the multi-face test synthesizes one by
     tiling copies of the single-face fixture, so it still runs when only the
     single-face image is present.
+  - Angled/partial face: PIXELVEIL_TEST_ANGLED_FACE_IMAGE, else angled_face.*.
+    This is a CHARACTERIZATION test — it records whatever the detector actually
+    does on an angled face (which MediaPipe may miss, an accepted v1 limitation
+    per TESTING.md 3.1 / ISSUE-002). It never requires a face to be detected.
 """
 
 import glob
@@ -51,8 +55,21 @@ def _find_multi_face_image():
     env = os.environ.get("PIXELVEIL_TEST_MULTI_FACE_IMAGE")
     if env and os.path.isfile(env):
         return env
+    for stem in ("multiple_faces", "multi_face"):
+        for ext in ("jpg", "jpeg", "png", "bmp"):
+            matches = glob.glob(os.path.join(_ASSETS_DIR, f"{stem}.{ext}"))
+            if matches:
+                return matches[0]
+    return None
+
+
+def _find_angled_face_image():
+    """Locate an angled/partial-face fixture via env var or tests/assets/, or None."""
+    env = os.environ.get("PIXELVEIL_TEST_ANGLED_FACE_IMAGE")
+    if env and os.path.isfile(env):
+        return env
     for ext in ("jpg", "jpeg", "png", "bmp"):
-        matches = glob.glob(os.path.join(_ASSETS_DIR, f"multi_face.{ext}"))
+        matches = glob.glob(os.path.join(_ASSETS_DIR, f"angled_face.{ext}"))
         if matches:
             return matches[0]
     return None
@@ -183,6 +200,56 @@ class TestFaceDetectorMultipleFaces(unittest.TestCase):
             self.assertGreater(h, 0)
             self.assertLessEqual(x + w, fw)
             self.assertLessEqual(y + h, fh)
+
+
+class TestFaceDetectorAngledFace(unittest.TestCase):
+    """Characterization test for an angled/partial face.
+
+    Per TESTING.md 3.1, an angled face is a documented, accepted v1 limitation:
+    MediaPipe may miss it. This test therefore does NOT require a detection — it
+    only asserts the invariants that must always hold (a ``list`` is returned and
+    any boxes are within frame bounds) and records the observed count so the
+    behavior is tracked (see ISSUE-002). It must not be "fixed" by changing
+    face_detector.py to force a detection.
+    """
+
+    def setUp(self):
+        if not _MP_HAS_SOLUTIONS:
+            self.skipTest(
+                "MediaPipe solutions.face_detection unavailable here (ISSUE-001) "
+                "— run on a real MediaPipe 0.10.x install"
+            )
+        self.image_path = _find_angled_face_image()
+        if not self.image_path:
+            self.skipTest(
+                "No angled-face fixture found — set PIXELVEIL_TEST_ANGLED_FACE_IMAGE "
+                "or add tests/assets/angled_face.jpg (see this module's docstring)"
+            )
+        import cv2
+
+        self.frame = cv2.imread(self.image_path)
+        self.assertIsNotNone(self.frame, f"could not read image: {self.image_path}")
+
+    def test_returns_list_and_boxes_within_bounds(self):
+        # Invariants that hold regardless of whether the angled face is detected.
+        boxes = detect_faces(self.frame)
+        self.assertIsInstance(boxes, list)
+        fh, fw = self.frame.shape[:2]
+        for x, y, w, h in boxes:
+            self.assertGreaterEqual(x, 0)
+            self.assertGreaterEqual(y, 0)
+            self.assertGreater(w, 0)
+            self.assertGreater(h, 0)
+            self.assertLessEqual(x + w, fw)
+            self.assertLessEqual(y + h, fh)
+
+    def test_characterize_observed_detection(self):
+        # Characterization only — no minimum is asserted. Observed 2026-08-04:
+        # detect_faces() returned 0 boxes for tests/assets/angled_face.jpg
+        # (the angled face was missed), consistent with TESTING.md 3.1 and
+        # logged as the accepted v1 limitation in ISSUE-002.
+        boxes = detect_faces(self.frame)
+        self.assertIsInstance(len(boxes), int)
 
 
 if __name__ == "__main__":

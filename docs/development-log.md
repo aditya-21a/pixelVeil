@@ -19,6 +19,12 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Multi-face (real image) + angled-face characterization tests
+- Changed: tests/test_face_detector.py, tests/assets/README.md; docs/current-state.md, tasks.md, known-issues.md
+- Why: TASKS.md Phase 1 "multiple faces" + "angled/partial face" — TESTING.md 3.1
+- Result: `9 passed` on MediaPipe 0.10.21. multiple_faces.jpg → 3 faces detected (all in bounds); angled_face.jpg → 0 detected (missed) — recorded as accepted v1 limitation ISSUE-002 (characterization test asserts invariants only, does not force detection). face_detector.py unchanged.
+- Commit: uncommitted
+
 ## 2026-08-04 — Add multi-face detector test
 - Changed: tests/test_face_detector.py, tests/assets/README.md; docs/current-state.md, tasks.md
 - Why: TASKS.md Phase 1 "Test face detector on a still image with multiple faces" — TESTING.md 3.1

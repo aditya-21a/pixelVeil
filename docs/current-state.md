@@ -17,7 +17,7 @@ Last updated: 2026-08-04
 
 | Component | Status | Notes |
 |---|---|---|
-| `core/face_detector.py` | Implemented & validated (single + multiple faces) | `detect_faces(frame) -> list[(x,y,w,h)]` via MediaPipe `solutions.face_detection`. `tests/test_face_detector.py` passes on MediaPipe 0.10.21 (single-face + multi-face + guards). Angled/partial case pending fixture |
+| `core/face_detector.py` | Implemented & validated (single + multiple faces; angled = known miss) | `detect_faces(frame) -> list[(x,y,w,h)]` via MediaPipe `solutions.face_detection`. `tests/test_face_detector.py` passes on MediaPipe 0.10.21 (single + multi + guards + angled characterization). Angled/partial faces may be missed — accepted v1 limitation, see ISSUE-002 |
 | `core/ocr_detector.py` | Not implemented | Stub only |
 | `core/pii_matcher.py` | Not implemented | EMAIL regex stubbed in, PHONE/CARD/IP not yet written |
 | `core/redactor.py` | Not implemented | Stub only |
@@ -33,7 +33,8 @@ Last updated: 2026-08-04
 ## What's Been Validated (per TESTING.md)
 
 - TESTING.md 3.1 — face detector, single frontal face: **PASS** (`tests/test_face_detector.py`, MediaPipe 0.10.21, 2026-08-04).
-- TESTING.md 3.1 — face detector, multiple faces: **PASS** (`tests/test_face_detector.py`, `7 passed`, MediaPipe 0.10.21, 2026-08-04). Angled/partial case not yet run.
+- TESTING.md 3.1 — face detector, multiple faces: **PASS** (`tests/test_face_detector.py`, `9 passed`, MediaPipe 0.10.21, 2026-08-04) — 3 faces detected in `tests/assets/multiple_faces.jpg`.
+- TESTING.md 3.1 — face detector, angled/partial face: **CHARACTERIZED** — angled face in `tests/assets/angled_face.jpg` was **missed (0 detected)**, the documented, accepted v1 limitation (ISSUE-002).
 
 ---
 
@@ -42,6 +43,7 @@ Last updated: 2026-08-04
 *(Mirror the high-level summary here; full detail lives in known-issues.md. Keep this list short — just enough to orient a new session.)*
 
 - MediaPipe is pinned to `mediapipe==0.10.21` in `requirements.txt` because 1.0.0 (and 0.10.35 here) removed the legacy `solutions.face_detection` API that `core/face_detector.py` uses per D5. See ISSUE-001 (resolved).
+- Angled/partial faces may be missed by the face detector (observed: 0 detected on `tests/assets/angled_face.jpg`). Accepted v1 limitation per TESTING.md 3.1 — see ISSUE-002.
 
 ---
 

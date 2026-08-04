@@ -26,8 +26,8 @@ ISSUE-001), the single-face tests **skip** rather than fail.
 
 ## Multi-face fixture (for TESTING.md 3.1, "multiple faces")
 
-**Filename:** `multi_face.jpg` (or `.jpeg`, `.png`, `.bmp`)
-**Location:** this directory — `tests/assets/multi_face.jpg`
+**Filename:** `multiple_faces.jpg` (or `.jpeg`, `.png`, `.bmp`; `multi_face.*` also accepted)
+**Location:** this directory — `tests/assets/multiple_faces.jpg`
 
 **What the image must be:**
 - **2–3** clear, mostly frontal, well-lit human faces in one photo (per TESTING.md 3.1).
@@ -37,8 +37,25 @@ ISSUE-001), the single-face tests **skip** rather than fail.
 **Alternative:** point the test at any image via the
 `PIXELVEIL_TEST_MULTI_FACE_IMAGE` environment variable (same syntax as above).
 
-**Optional:** this fixture is not required. If it is absent, the multi-face test
-**synthesizes** a multi-face image by tiling copies of `single_frontal_face.jpg`,
-so it still runs with only the single-face fixture present. Supplying a real
-multi-face photo gives a stronger, more realistic check.
+**Fallback:** if no multi-face fixture is present, the multi-face test
+**synthesizes** one by tiling copies of `single_frontal_face.jpg`, so it still
+runs with only the single-face fixture present. A real multi-face photo gives a
+stronger, more realistic check and is preferred.
+
+## Angled/partial-face fixture (for TESTING.md 3.1, "angled face")
+
+**Filename:** `angled_face.jpg` (or `.jpeg`, `.png`, `.bmp`)
+**Location:** this directory — `tests/assets/angled_face.jpg`
+
+**What the image must be:**
+- One human face at a strong angle (profile / three-quarter) or partially occluded.
+- A real photograph.
+
+**Alternative:** `PIXELVEIL_TEST_ANGLED_FACE_IMAGE` environment variable.
+
+This is a **characterization** test, not a pass/fail detection test: MediaPipe
+may miss angled faces (accepted v1 limitation — ISSUE-002). The test records the
+observed behavior and only asserts invariants (a list is returned, any boxes are
+within bounds). If the fixture is absent, the angled test **skips**.
+
 

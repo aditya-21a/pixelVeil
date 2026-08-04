@@ -16,8 +16,9 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] Test face detector standalone on a still image with 1 face, confirm bbox accuracy
   - Validated: `tests/test_face_detector.py` (encodes TESTING.md 3.1) — `5 passed` with MediaPipe 0.10.21 + `tests/assets/single_frontal_face.jpg`. See ISSUE-001 (resolved).
 - [x] Test face detector on a still image with multiple faces
-  - Validated: `tests/test_face_detector.py::TestFaceDetectorMultipleFaces` (encodes TESTING.md 3.1 "multiple faces") — `7 passed` with MediaPipe 0.10.21. Uses `tests/assets/multi_face.*` / `PIXELVEIL_TEST_MULTI_FACE_IMAGE` if present, else synthesizes a multi-face frame by tiling `single_frontal_face.jpg`; requires a majority (>= 2) detected.
-- [ ] Test face detector on an angled/partial face — confirm known limitation, log behavior
+  - Validated: `tests/test_face_detector.py::TestFaceDetectorMultipleFaces` (encodes TESTING.md 3.1 "multiple faces") — `9 passed` with MediaPipe 0.10.21 against `tests/assets/multiple_faces.jpg` (3 faces detected, all bboxes within bounds; requires majority >= 2). Env override: `PIXELVEIL_TEST_MULTI_FACE_IMAGE`.
+- [x] Test face detector on an angled/partial face — confirm known limitation, log behavior
+  - Validated: `tests/test_face_detector.py::TestFaceDetectorAngledFace` — characterization test against `tests/assets/angled_face.jpg`. Observed: **0 faces detected (angled face missed)** on MediaPipe 0.10.21; asserts invariants only (returns list, boxes within bounds), does not force a detection. Logged as accepted v1 limitation ISSUE-002.
 - [ ] `core/ocr_detector.py` — `detect_text(frame) -> list[(text, bbox)]` using Tesseract
 - [ ] Test OCR detector standalone on a still frame with a visible email/phone/card number
 - [ ] `core/pii_matcher.py` — regex patterns for email, phone, credit card, IP

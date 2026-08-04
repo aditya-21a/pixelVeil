@@ -21,7 +21,14 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 
 ## Open Issues
 
-*(none open)*
+### ISSUE-002 — Angled/partial faces may be missed by the face detector
+- **Status:** Open (accepted v1 limitation)
+- **Severity:** Minor
+- **Affected files:** `core/face_detector.py`
+- **Description:** MediaPipe's `solutions.face_detection` is tuned for frontal faces and can miss faces at a strong angle or partially occluded. Observed 2026-08-04: `detect_faces()` returned **0 boxes** for `tests/assets/angled_face.jpg` (face missed). This matches the documented weak point in TESTING.md 3.1 and is an accepted v1 limitation, not a code bug — the detector otherwise behaves correctly (returns a list; frontal/multi-face detection works).
+- **Reproduction:** `detect_faces(cv2.imread("tests/assets/angled_face.jpg"))` → `[]` on MediaPipe 0.10.21.
+- **Workaround:** none for v1. TESTING.md 3.1 says not to block v1 ship on this; bias-toward-blur and user-drawn static zones mitigate in the full pipeline. `tests/test_face_detector.py::TestFaceDetectorAngledFace` is a characterization test that records the behavior without forcing a detection.
+- **Notes:** Do not "fix" by lowering thresholds or swapping the model to force this single image to pass — that risks false positives elsewhere. Revisit only if angled-miss rate proves unacceptable during Phase 2 pipeline validation.
 
 ---
 
