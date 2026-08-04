@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+build/
+dist/
+*.spec
+tests/sample_videos/*.mp4
+tests/sample_videos/*.mov
+!tests/sample_videos/.gitkeep
+outputs/
+*.log

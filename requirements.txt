@@ -1,0 +1,6 @@
+opencv-python
+mediapipe
+pytesseract
+pillow
+imageio-ffmpeg
+flask
