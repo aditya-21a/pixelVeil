@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — OCR frame-sampling + PII bbox persistence in video_pipeline.py
+- Changed: core/video_pipeline.py, tests/test_video_pipeline.py; docs/current-state.md, tasks.md, known-issues.md, DECISIONS.md, development-log.md
+- Why: TASKS.md Phase 1 — make `ocr_sample_rate` functional; run OCR every Nth frame, persist PII detections between samples (architecture.md 6.4–6.5, 7)
+- Result: OCR (detect_text→classify) runs only when `frame_index % ocr_sample_rate == 0`; between samples the last detections persist as `(pii_type, bbox, replacement)` and re-apply every frame. Faces + static zones still every frame. Fake-data string generated once per sample and persisted to avoid flicker (D18). `ocr_sample_rate` validated as positive int before opening the video. API/summary/progress keys unchanged; `rate=1` == prior every-frame behavior. `tests/test_video_pipeline.py` — `20 passed, 12 subtests`; redactor/zone_manager/fake_data/pii_matcher regression `60 passed`.
+- Note: added ISSUE-003 (moving/scrolling text may be missed between samples — accepted tradeoff, TESTING.md 3.2) and D18 (persist rendered fake value, not just bbox). ffmpeg audio mux still deferred to the next TASKS.md item. No new deps, no architecture change.
+- Commit: uncommitted
+
 ## 2026-08-04 — Implement video_pipeline.py orchestrator + tests
 - Changed: core/video_pipeline.py, tests/test_video_pipeline.py (new); docs/current-state.md, tasks.md, development-log.md
 - Why: TASKS.md Phase 1 — orchestrate read frame → detect faces+OCR → match PII → redact → write frame

@@ -21,6 +21,15 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 
 ## Open Issues
 
+### ISSUE-003 — PII moving/scrolling between OCR samples can be missed or mis-placed
+- **Status:** Open (accepted v1 tradeoff, by design)
+- **Severity:** Minor
+- **Affected files:** `core/video_pipeline.py`
+- **Description:** OCR now runs only every `ocr_sample_rate`-th frame (D18 / architecture.md 6.4–6.5, 7); between samples the last PII detections are persisted and re-applied at their **last known bbox**. For static on-screen text this is exact. For text that moves or scrolls between samples, the persisted box can lag the text's real position, and PII that appears *and disappears* entirely within a single sample interval may never be redacted. This is the expected frame-sampling tradeoff called out in TESTING.md 3.2 ("Scrolling/moving text containing PII — may be missed between OCR samples"), not a code defect.
+- **Reproduction:** process a clip where a PII string scrolls quickly with `ocr_sample_rate` set high (e.g. 10); the redaction box trails the moving text between samples.
+- **Workaround:** lower `ocr_sample_rate` (down to `1` = OCR every frame, no persistence gap) to trade speed for coverage. Faces are detected every frame and static user zones apply every frame, so neither is affected by this.
+- **Notes:** Quantify the miss rate during Phase 2 pipeline validation before choosing a default sample rate (TESTING.md acceptance criteria). Do not "fix" by forcing OCR every frame — that discards the performance benefit sampling exists for; the right lever is the sample-rate default, decided against real test videos.
+
 ### ISSUE-002 — Angled/partial faces may be missed by the face detector
 - **Status:** Open (accepted v1 limitation)
 - **Severity:** Minor
