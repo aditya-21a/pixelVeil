@@ -4,7 +4,8 @@ opencv-python
 # API that core/face_detector.py relies on (see docs/DECISIONS.md D5, ISSUE-001).
 mediapipe==0.10.21
 numpy
-pytesseract
+rapidocr
+onnxruntime
 pillow
 imageio-ffmpeg
 

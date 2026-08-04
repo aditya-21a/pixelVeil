@@ -27,11 +27,12 @@ Record of significant decisions and why they were made — so reasoning doesn't 
 **Rejected alternative:** `dlib`/`face_recognition` — better documented in tutorials, slightly more accurate, but typically requires compiling from source on Windows unless an exact-matching prebuilt wheel is found. Real setup risk. Revisit for v2 if MediaPipe's accuracy proves insufficient in real testing.
 **Also rejected:** OpenCV Haar Cascades (too many false negatives — unacceptable in a redaction tool), YOLO-face/RetinaFace (overkill weight for non-crowd screen recordings).
 
-### D6 — Tesseract over EasyOCR/PaddleOCR for OCR
-**Decision:** Use Tesseract via `pytesseract`.
-**Why:** Fast enough on sampled frames, extremely well documented, free. Accepted cost: it's a separate binary that must be bundled at packaging time (known, well-documented step).
+### D6 — Tesseract over EasyOCR/PaddleOCR for OCR (superseded — see D17)
+**Original decision:** Use Tesseract via `pytesseract`.
+**Why (at the time):** Fast enough on sampled frames, extremely well documented, free. Accepted cost: it's a separate binary that must be bundled at packaging time (known, well-documented step).
 **Rejected alternative:** EasyOCR — no external binary, but PyTorch-based, meaning a much heavier dependency footprint and slower per-frame inference. Better on stylized/rotated text, but most on-screen text in the target use case (dashboards, CRMs) is clean and horizontal, so the extra weight isn't justified for v1.
-**v2 note:** if real-world testing shows Tesseract's accuracy on dashboard/CRM screenshots is insufficient, add EasyOCR as an optional heavier/slower "high accuracy" mode — not a full replacement.
+**v2 note (historical):** add EasyOCR as an optional heavier/slower "high accuracy" mode if Tesseract's accuracy proved insufficient.
+**Status:** Superseded by D17 (RapidOCR on ONNX Runtime) before the OCR detector was implemented. The "separate binary that must be bundled" cost this decision accepted is exactly what D17 removes. Kept here for history — the reasoning about clean/horizontal on-screen text and the pure-Python vs. external-binary tradeoff still informs D17.
 
 ### D7 — Regex over NER/ML for PII pattern matching
 **Decision:** Use Python's built-in `re` module for email/phone/card/IP detection.
@@ -77,3 +78,13 @@ Record of significant decisions and why they were made — so reasoning doesn't 
 ### D16 — Batch processing excluded from v1
 **Decision:** Single file at a time only.
 **Why:** Keeps v1 scope minimal and focused on proving the core detection pipeline works correctly before adding convenience features. Revisit once base product has paying users requesting it.
+
+### D17 — RapidOCR on ONNX Runtime, replacing Tesseract (supersedes D6)
+**Decision:** Use RapidOCR (the modern `rapidocr` package, v3.x) with the ONNX Runtime execution engine as the OCR backend. `core/ocr_detector.py` pins the det/cls/rec engines to `EngineType.ONNXRUNTIME`.
+**Why:**
+- **Fully offline, pure-pip, no separate binary.** The `rapidocr` wheel bundles its PP-OCRv6 detection/recognition ONNX models, so `pip install rapidocr onnxruntime` is the entire setup — no system Tesseract install, no PATH configuration, and nothing extra to bundle at packaging time. This removes the single accepted cost of D6 and the whole "install the Tesseract binary" / "bundle `assets/tesseract/`" workflow. Verified offline: models load from inside the installed package with no network access at runtime.
+- **Good CPU performance for repeated frame OCR.** PixelVeil runs OCR repeatedly on sampled video frames (UI text, emails, phones, IPs, cards, terminal/browser text). RapidOCR's small ONNX models run efficiently on CPU-only Windows machines, which is the target environment (no GPU dependency, consistent with the rest of the pipeline).
+- **Backend stays isolated.** The public contract `detect_text(frame) -> list[(text, bbox)]` is unchanged. All RapidOCR-specific handling (the `RapidOCROutput` result object, polygon corner arrays, `EngineType`) lives inside `core/ocr_detector.py`; `pii_matcher.py`, `redactor.py`, and `video_pipeline.py` only ever see the normalized `(text, (x, y, w, h))` list — the same axis-aligned integer-pixel bbox convention used by `face_detector.py`.
+**Rejected alternatives (now):** `rapidocr_onnxruntime` (the older, separate 1.x/2.x package) — the modern unified `rapidocr` package with an explicit `EngineType.ONNXRUNTIME` selection supersedes it and is what is installed. PaddleOCR / EasyOCR — not revisited; adding a second/fallback OCR engine is explicitly out of scope for now.
+**Installed versions at decision time:** `rapidocr` 3.9.2, `onnxruntime` 1.28.0 (bundled models: PP-OCRv6 det/rec small + PP-OCRv2 mobile cls).
+**Carried forward from D6:** the observation that target on-screen text is clean and horizontal still holds; RapidOCR handles that case at least as well while dropping the external-binary cost. The bias remains "avoid missed PII over avoiding extra boxes" — the recognition confidence threshold is kept permissive (default 0.5) and pii_matcher.py, not the OCR stage, is responsible for rejecting non-PII text.

@@ -7,8 +7,8 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 ## Phase 0 — Environment Setup
 - [ ] Install Python (confirm version, pin it in README)
 - [ ] Set up virtual environment
-- [ ] Install core deps: `opencv-python`, `mediapipe`, `pytesseract`, `pillow`, `imageio-ffmpeg`
-- [ ] Install Tesseract OCR binary (Windows installer), confirm `pytesseract` can find it
+- [ ] Install core deps: `opencv-python`, `mediapipe`, `rapidocr`, `onnxruntime`, `pillow`, `imageio-ffmpeg`
+- [ ] ~~Install Tesseract OCR binary~~ — **no longer required.** OCR backend is RapidOCR on ONNX Runtime (DECISIONS.md D17, supersedes D6); its ONNX models ship inside the `rapidocr` wheel, so `pip install rapidocr onnxruntime` is the whole OCR setup (fully offline, no separate binary).
 - [ ] Confirm ffmpeg is accessible (via `imageio-ffmpeg` or system install)
 
 ## Phase 1 — Core Pipeline (plain scripts, no GUI yet)
@@ -19,8 +19,10 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Validated: `tests/test_face_detector.py::TestFaceDetectorMultipleFaces` (encodes TESTING.md 3.1 "multiple faces") — `9 passed` with MediaPipe 0.10.21 against `tests/assets/multiple_faces.jpg` (3 faces detected, all bboxes within bounds; requires majority >= 2). Env override: `PIXELVEIL_TEST_MULTI_FACE_IMAGE`.
 - [x] Test face detector on an angled/partial face — confirm known limitation, log behavior
   - Validated: `tests/test_face_detector.py::TestFaceDetectorAngledFace` — characterization test against `tests/assets/angled_face.jpg`. Observed: **0 faces detected (angled face missed)** on MediaPipe 0.10.21; asserts invariants only (returns list, boxes within bounds), does not force a detection. Logged as accepted v1 limitation ISSUE-002.
-- [ ] `core/ocr_detector.py` — `detect_text(frame) -> list[(text, bbox)]` using Tesseract
-- [ ] Test OCR detector standalone on a still frame with a visible email/phone/card number
+- [x] `core/ocr_detector.py` — `detect_text(frame) -> list[(text, bbox)]` using RapidOCR (ONNX Runtime)
+  - Backend swapped from the originally planned Tesseract/pytesseract to RapidOCR on ONNX Runtime (DECISIONS.md D17, supersedes D6). Public interface unchanged; RapidOCR-specific objects normalized to `(text, (x,y,w,h))` inside the module, nothing leaks to callers. `rapidocr` 3.9.2 / `onnxruntime` 1.28.0, bundled PP-OCRv6 models, fully offline.
+- [x] Test OCR detector standalone on a still frame with a visible email/phone/card number
+  - Validated: `tests/test_ocr_detector.py` — `10 passed`. Covers normal UI text, email, phone, IPv4, credit card, small text, plus None/empty/blank-frame guards and a no-text graphics frame. All returned bboxes asserted in-bounds. Text checked leniently (key token present). Frames synthesized with OpenCV at test time (no fixtures, no network).
 - [ ] `core/pii_matcher.py` — regex patterns for email, phone, credit card, IP
 - [ ] Unit test each regex pattern against valid + invalid sample strings
 - [ ] `core/redactor.py` — draw blur, solid box, and fake-data text onto a frame given bboxes
@@ -51,7 +53,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Phase 4 — Packaging (Windows .exe)
 - [ ] Set up PyInstaller build config
-- [ ] Bundle Tesseract binary into `assets/`
+- [ ] ~~Bundle Tesseract binary into `assets/`~~ — **not needed.** RapidOCR's ONNX models ship inside the `rapidocr` wheel; PyInstaller just needs to collect the `rapidocr` package data (no external OCR binary). See DECISIONS.md D17.
 - [ ] Test packaged .exe on a clean Windows machine (not your dev machine)
 - [ ] Check for antivirus/Defender false-positive flagging — plan mitigation (code signing / vendor allowlisting) if it occurs
 

@@ -19,6 +19,12 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — OCR backend → RapidOCR (ONNX Runtime); implement + test ocr_detector
+- Changed: core/ocr_detector.py, tests/test_ocr_detector.py (new), requirements.txt (pytesseract→rapidocr+onnxruntime, already staged); docs/decisions.md (D6 superseded, D17 added), architecture.md (§3.2 + diagram + structure + deps), current-state.md, tasks.md
+- Why: TASKS.md Phase 1 OCR detector; backend swapped from planned Tesseract to RapidOCR/ONNX per developer request — pure-pip, offline, bundled ONNX models, good CPU perf for repeated frame OCR (D17)
+- Result: `10 passed` (tests/test_ocr_detector.py) on rapidocr 3.9.2 / onnxruntime 1.28.0; face suite still `9 passed` (no regression). Public `detect_text(frame) -> list[(text,(x,y,w,h))]` preserved; RapidOCR objects normalized in-module, no leak. Fully offline (models load from wheel, no runtime download — verified).
+- Commit: uncommitted
+
 ## 2026-08-04 — Multi-face (real image) + angled-face characterization tests
 - Changed: tests/test_face_detector.py, tests/assets/README.md; docs/current-state.md, tasks.md, known-issues.md
 - Why: TASKS.md Phase 1 "multiple faces" + "angled/partial face" — TESTING.md 3.1
