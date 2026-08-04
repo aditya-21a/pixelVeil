@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Implement video_pipeline.py orchestrator + tests
+- Changed: core/video_pipeline.py, tests/test_video_pipeline.py (new); docs/current-state.md, tasks.md, development-log.md
+- Why: TASKS.md Phase 1 — orchestrate read frame → detect faces+OCR → match PII → redact → write frame
+- Result: `process_video(input, output, mode="blur"|"fake_data", zones, ocr_sample_rate, progress_callback) -> summary`. Orchestration only — reuses face_detector/ocr_detector/pii_matcher/redactor/ZoneManager/fake_data public APIs, no duplicated logic (asserted via mocks). Faces ALWAYS blurred; PII per mode (blur, or fake_data.generate()→fake_data_region()); static zones every frame. Preserves dims/FPS; cap+writer released in `finally`. `tests/test_video_pipeline.py` — `10 passed`.
+- Note: OCR N-frame sampling/bbox persistence + ffmpeg audio mux deliberately deferred to the next two TASKS.md items — `ocr_sample_rate` accepted but not honored (OCR every frame), output is OpenCV video-only intermediate (D8 mux is the follow-on). No new deps, no architecture change.
+- Commit: uncommitted
+
 ## 2026-08-04 — Implement zone_manager.py static zones + unit tests
 - Changed: core/zone_manager.py, tests/test_zone_manager.py (new); docs/current-state.md, tasks.md, development-log.md
 - Why: TASKS.md Phase 1 — store/apply user-defined static redaction zones
