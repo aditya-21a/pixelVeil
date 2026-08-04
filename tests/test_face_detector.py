@@ -1,18 +1,19 @@
 """
-Standalone tests for core/face_detector.py — single-face bounding-box accuracy.
+Standalone tests for core/face_detector.py — single- and multi-face detection.
 
-Acceptance criteria: docs/TESTING.md 3.1 (single frontal face -> detected,
-accurate bbox).
+Acceptance criteria: docs/TESTING.md 3.1 (single frontal face -> detected with
+an accurate bbox; multiple faces -> a majority detected).
 
-The real detection path requires MediaPipe's `solutions.face_detection` API and
-a still image containing exactly one clear frontal face. Where either is
-unavailable the single-face tests SKIP (they do not fail) — see ISSUE-001 for
-the MediaPipe stub-wheel limitation in the current dev sandbox. The guard-path
-tests always run.
+The real detection path requires MediaPipe's `solutions.face_detection` API. If
+it is unavailable the detection tests SKIP (they do not fail) — see ISSUE-001.
+The guard-path tests always run.
 
-To run the real single-face check, supply a still image with one frontal face:
-  - set env var PIXELVEIL_TEST_FACE_IMAGE to the image path, or
-  - drop a file at tests/assets/single_frontal_face.<jpg|jpeg|png|bmp>
+Fixtures (tests/assets/, or via env var):
+  - Single face: PIXELVEIL_TEST_FACE_IMAGE, else single_frontal_face.<jpg|jpeg|png|bmp>
+  - Multiple faces: PIXELVEIL_TEST_MULTI_FACE_IMAGE, else multi_face.<jpg|jpeg|png|bmp>.
+    If no multi-face fixture is supplied, the multi-face test synthesizes one by
+    tiling copies of the single-face fixture, so it still runs when only the
+    single-face image is present.
 """
 
 import glob
@@ -38,6 +39,34 @@ def _find_single_face_image():
         if matches:
             return matches[0]
     return None
+
+
+# Number of faces planted when synthesizing a multi-face fixture from the
+# single-face image. 3 lets "majority detected" (>= 2) tolerate one miss.
+_SYNTH_MULTI_FACE_COUNT = 3
+
+
+def _find_multi_face_image():
+    """Locate a multi-face fixture via env var or tests/assets/, or None."""
+    env = os.environ.get("PIXELVEIL_TEST_MULTI_FACE_IMAGE")
+    if env and os.path.isfile(env):
+        return env
+    for ext in ("jpg", "jpeg", "png", "bmp"):
+        matches = glob.glob(os.path.join(_ASSETS_DIR, f"multi_face.{ext}"))
+        if matches:
+            return matches[0]
+    return None
+
+
+def _synthesize_multi_face(frame, n, gap=60):
+    """Build a multi-face image by tiling ``n`` copies of a single-face frame
+    side by side on a black background, separated by ``gap`` pixels."""
+    h, w = frame.shape[:2]
+    canvas = np.zeros((h, w * n + gap * (n + 1), 3), dtype=np.uint8)
+    for i in range(n):
+        x = gap + i * (w + gap)
+        canvas[0:h, x:x + w] = frame
+    return canvas
 
 
 class TestFaceDetectorGuards(unittest.TestCase):
@@ -95,6 +124,65 @@ class TestFaceDetectorSingleFace(unittest.TestCase):
         # A single face should cover a non-trivial but not absurd share of frame.
         self.assertGreater(area_frac, 0.005)
         self.assertLess(area_frac, 0.95)
+
+
+class TestFaceDetectorMultipleFaces(unittest.TestCase):
+    """Multiple faces in one still image: a majority must be detected, each
+    with a valid bbox (TESTING.md 3.1 "multiple faces in frame")."""
+
+    def setUp(self):
+        if not _MP_HAS_SOLUTIONS:
+            self.skipTest(
+                "MediaPipe solutions.face_detection unavailable here (ISSUE-001) "
+                "— run on a real MediaPipe 0.10.x install"
+            )
+        import cv2
+
+        multi_path = _find_multi_face_image()
+        if multi_path:
+            self.frame = cv2.imread(multi_path)
+            self.assertIsNotNone(self.frame, f"could not read image: {multi_path}")
+            # A real multi-face photo has an unknown count; require >= 2 detected.
+            self.min_expected = 2
+            self.source = multi_path
+            return
+
+        # Fallback: synthesize a multi-face image from the single-face fixture so
+        # the test still runs when only the single-face image is available.
+        single_path = _find_single_face_image()
+        if not single_path:
+            self.skipTest(
+                "No multi-face fixture and no single-face fixture to synthesize "
+                "from — add tests/assets/multi_face.jpg or set "
+                "PIXELVEIL_TEST_MULTI_FACE_IMAGE (see this module's docstring)"
+            )
+        single = cv2.imread(single_path)
+        self.assertIsNotNone(single, f"could not read image: {single_path}")
+        self.frame = _synthesize_multi_face(single, _SYNTH_MULTI_FACE_COUNT)
+        # Majority of the planted faces must be detected (TESTING.md tolerance).
+        self.min_expected = (_SYNTH_MULTI_FACE_COUNT // 2) + 1
+        self.source = f"synthesized {_SYNTH_MULTI_FACE_COUNT}x from {os.path.basename(single_path)}"
+
+    def test_detects_multiple_faces(self):
+        boxes = detect_faces(self.frame)
+        self.assertGreaterEqual(
+            len(boxes),
+            self.min_expected,
+            f"expected >= {self.min_expected} faces from {self.source}, "
+            f"got {len(boxes)}: {boxes}",
+        )
+
+    def test_all_bboxes_within_frame_bounds(self):
+        boxes = detect_faces(self.frame)
+        self.assertGreaterEqual(len(boxes), self.min_expected)
+        fh, fw = self.frame.shape[:2]
+        for x, y, w, h in boxes:
+            self.assertGreaterEqual(x, 0)
+            self.assertGreaterEqual(y, 0)
+            self.assertGreater(w, 0)
+            self.assertGreater(h, 0)
+            self.assertLessEqual(x + w, fw)
+            self.assertLessEqual(y + h, fh)
 
 
 if __name__ == "__main__":

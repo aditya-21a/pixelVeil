@@ -13,9 +13,10 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Phase 1 — Core Pipeline (plain scripts, no GUI yet)
 - [x] `core/face_detector.py` — `detect_faces(frame) -> list[bbox]` using MediaPipe
-- [~] Test face detector standalone on a still image with 1 face, confirm bbox accuracy
-  - Test written: `tests/test_face_detector.py` (encodes TESTING.md 3.1). Guard paths pass; single-face detection tests SKIP in this sandbox (ISSUE-001) and need a real MediaPipe 0.10.x + a `tests/assets/single_frontal_face.jpg` fixture to confirm.
-- [ ] Test face detector on a still image with multiple faces
+- [x] Test face detector standalone on a still image with 1 face, confirm bbox accuracy
+  - Validated: `tests/test_face_detector.py` (encodes TESTING.md 3.1) — `5 passed` with MediaPipe 0.10.21 + `tests/assets/single_frontal_face.jpg`. See ISSUE-001 (resolved).
+- [x] Test face detector on a still image with multiple faces
+  - Validated: `tests/test_face_detector.py::TestFaceDetectorMultipleFaces` (encodes TESTING.md 3.1 "multiple faces") — `7 passed` with MediaPipe 0.10.21. Uses `tests/assets/multi_face.*` / `PIXELVEIL_TEST_MULTI_FACE_IMAGE` if present, else synthesizes a multi-face frame by tiling `single_frontal_face.jpg`; requires a majority (>= 2) detected.
 - [ ] Test face detector on an angled/partial face — confirm known limitation, log behavior
 - [ ] `core/ocr_detector.py` — `detect_text(frame) -> list[(text, bbox)]` using Tesseract
 - [ ] Test OCR detector standalone on a still frame with a visible email/phone/card number

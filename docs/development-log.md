@@ -19,6 +19,12 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Add multi-face detector test
+- Changed: tests/test_face_detector.py, tests/assets/README.md; docs/current-state.md, tasks.md
+- Why: TASKS.md Phase 1 "Test face detector on a still image with multiple faces" — TESTING.md 3.1
+- Result: `7 passed` on MediaPipe 0.10.21; multi-face uses multi_face.* fixture (or PIXELVEIL_TEST_MULTI_FACE_IMAGE), else synthesizes one by tiling single_frontal_face.jpg; requires majority (>= 2) detected
+- Commit: uncommitted
+
 ## 2026-08-04 — Add standalone single-face detector test
 - Changed: tests/test_face_detector.py (new), tests/assets/README.md (new); docs/current-state.md, tasks.md, known-issues.md
 - Why: TASKS.md Phase 1 "Test face detector standalone on a still image with 1 face" — encodes TESTING.md 3.1

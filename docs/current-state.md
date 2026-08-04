@@ -17,7 +17,7 @@ Last updated: 2026-08-04
 
 | Component | Status | Notes |
 |---|---|---|
-| `core/face_detector.py` | Implemented, not yet validated | `detect_faces(frame) -> list[(x,y,w,h)]` via MediaPipe `solutions.face_detection`. Guard paths tested (`tests/test_face_detector.py`); single-face detection test written but SKIPS here — see ISSUE-001 |
+| `core/face_detector.py` | Implemented & validated (single + multiple faces) | `detect_faces(frame) -> list[(x,y,w,h)]` via MediaPipe `solutions.face_detection`. `tests/test_face_detector.py` passes on MediaPipe 0.10.21 (single-face + multi-face + guards). Angled/partial case pending fixture |
 | `core/ocr_detector.py` | Not implemented | Stub only |
 | `core/pii_matcher.py` | Not implemented | EMAIL regex stubbed in, PHONE/CARD/IP not yet written |
 | `core/redactor.py` | Not implemented | Stub only |
@@ -32,7 +32,8 @@ Last updated: 2026-08-04
 
 ## What's Been Validated (per TESTING.md)
 
-*(Nothing yet — fill in as Phase 2 test cases pass. Format: test case name, pass/fail, miss rate if applicable, date.)*
+- TESTING.md 3.1 — face detector, single frontal face: **PASS** (`tests/test_face_detector.py`, MediaPipe 0.10.21, 2026-08-04).
+- TESTING.md 3.1 — face detector, multiple faces: **PASS** (`tests/test_face_detector.py`, `7 passed`, MediaPipe 0.10.21, 2026-08-04). Angled/partial case not yet run.
 
 ---
 
@@ -40,7 +41,7 @@ Last updated: 2026-08-04
 
 *(Mirror the high-level summary here; full detail lives in known-issues.md. Keep this list short — just enough to orient a new session.)*
 
-- Installed `mediapipe` in this sandbox ships stub wheels exposing only the Tasks API (no `mp.solutions`) at every version, so the `face_detector` detection path cannot execute here. Code targets standard MediaPipe 0.10.x per D5; `requirements.txt` pins `mediapipe==0.10.*`. Validate on the real Windows machine. See ISSUE-001.
+- MediaPipe is pinned to `mediapipe==0.10.21` in `requirements.txt` because 1.0.0 (and 0.10.35 here) removed the legacy `solutions.face_detection` API that `core/face_detector.py` uses per D5. See ISSUE-001 (resolved).
 
 ---
 

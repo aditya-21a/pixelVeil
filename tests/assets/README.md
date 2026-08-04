@@ -23,3 +23,22 @@ $env:PIXELVEIL_TEST_FACE_IMAGE = "C:\path\to\your_face.jpg"  # current PowerShel
 
 If no fixture is found (and/or MediaPipe's `solutions` API is unavailable —
 ISSUE-001), the single-face tests **skip** rather than fail.
+
+## Multi-face fixture (for TESTING.md 3.1, "multiple faces")
+
+**Filename:** `multi_face.jpg` (or `.jpeg`, `.png`, `.bmp`)
+**Location:** this directory — `tests/assets/multi_face.jpg`
+
+**What the image must be:**
+- **2–3** clear, mostly frontal, well-lit human faces in one photo (per TESTING.md 3.1).
+- A real photograph, not a drawing/cartoon.
+- Each face occupying a reasonable portion of the frame.
+
+**Alternative:** point the test at any image via the
+`PIXELVEIL_TEST_MULTI_FACE_IMAGE` environment variable (same syntax as above).
+
+**Optional:** this fixture is not required. If it is absent, the multi-face test
+**synthesizes** a multi-face image by tiling copies of `single_frontal_face.jpg`,
+so it still runs with only the single-face fixture present. Supplying a real
+multi-face photo gives a stronger, more realistic check.
+
