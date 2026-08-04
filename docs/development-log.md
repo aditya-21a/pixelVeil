@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Implement utils/fake_data.py placeholder generation + unit tests
+- Changed: utils/fake_data.py, tests/test_fake_data.py (new); docs/current-state.md, tasks.md, development-log.md
+- Why: TASKS.md Phase 1 — generate replacement strings for fake-data redaction mode
+- Result: `generate(pii_type)` for EMAIL/PHONE/CARD/IP (matches pii_matcher). stdlib `random` only (no new dep). Values use reserved/documentation ranges (example.com, 192.0.2.x, 555-01xx, non-Luhn 4000-cards) — natural-looking but clearly synthetic. Invalid type → ValueError. `tests/test_fake_data.py` — `11 passed, 16 subtests` (0.09s).
+- Note: "name" deliberately NOT supported — pii_matcher has no name detection and D7 defers names to v2, so nothing upstream would flag a name region. Followed the stub's documented `pii_type`-only contract (no original-value arg), so the "don't reproduce original" requirement was N/A.
+- Commit: uncommitted
+
 ## 2026-08-04 — Implement redactor.py rendering layer + unit tests
 - Changed: core/redactor.py, tests/test_redactor.py (new); docs/current-state.md, tasks.md, development-log.md
 - Why: TASKS.md Phase 1 — draw blur / solid box / fake-data text onto a frame given bboxes

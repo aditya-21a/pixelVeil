@@ -23,7 +23,7 @@ Last updated: 2026-08-04
 | `core/redactor.py` | Implemented & tested (rendering only) | `blur_region()`, `box_region()`, `fake_data_region()` draw a redaction treatment onto a supplied bbox. Rendering-only — caller supplies bbox + (for fake-data) the replacement string; no detection/matching/fake-data generation here. `tests/test_redactor.py` — `14 passed`. Not yet wired into the pipeline. |
 | `core/zone_manager.py` | Not implemented | Stub only |
 | `core/video_pipeline.py` | Not implemented | Stub only |
-| `utils/fake_data.py` | Not implemented | Stub only |
+| `utils/fake_data.py` | Implemented & tested | `generate(pii_type)` returns a clearly-synthetic placeholder for "EMAIL"/"PHONE"/"CARD"/"IP" (matches pii_matcher's types; name not supported per D7). stdlib `random` only. Reserved/documentation ranges so values are never real. `tests/test_fake_data.py` — `11 passed`. Not yet wired into the pipeline. |
 | `webtest/server.py` | Skeleton working | Flask routes serve empty template pages, not wired to pipeline yet |
 | `gui/app.py` | Not started | Blocked on core pipeline validation (see TASKS.md Phase 2 gate) |
 | Packaging (PyInstaller) | Not started | Blocked on GUI |
