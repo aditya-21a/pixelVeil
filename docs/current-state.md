@@ -19,7 +19,7 @@ Last updated: 2026-08-04
 |---|---|---|
 | `core/face_detector.py` | Implemented & validated (single + multiple faces; angled = known miss) | `detect_faces(frame) -> list[(x,y,w,h)]` via MediaPipe `solutions.face_detection`. `tests/test_face_detector.py` passes on MediaPipe 0.10.21 (single + multi + guards + angled characterization). Angled/partial faces may be missed — accepted v1 limitation, see ISSUE-002 |
 | `core/ocr_detector.py` | Implemented & validated (synthetic + real screenshot) | `detect_text(frame) -> list[(text, (x,y,w,h))]` via **RapidOCR on ONNX Runtime** (D17, supersedes the planned Tesseract/D6). Backend isolated in-module; callers see only normalized `(text, bbox)`. `tests/test_ocr_detector.py` — `17 passed`: synthetic UI/email/phone/IPv4/card/small-text + guards, **plus a real-screenshot integration test** (`tests/assets/ocr_real_screen.png`) that reads all 5 planted values cleanly. Not yet wired into the video pipeline. |
-| `core/pii_matcher.py` | Not implemented | EMAIL regex stubbed in, PHONE/CARD/IP not yet written |
+| `core/pii_matcher.py` | Implemented & tested | Four regex functions: `is_email()`, `is_phone()`, `is_card()`, `is_ipv4()` (D7). `tests/test_pii_matcher.py` — `16 passed` covering valid/invalid samples + edge cases. Not yet wired into the pipeline. |
 | `core/redactor.py` | Not implemented | Stub only |
 | `core/zone_manager.py` | Not implemented | Stub only |
 | `core/video_pipeline.py` | Not implemented | Stub only |

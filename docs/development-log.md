@@ -19,6 +19,12 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Implement pii_matcher.py regex patterns + unit tests
+- Changed: core/pii_matcher.py, tests/test_pii_matcher.py; docs/current-state.md, tasks.md, development-log.md
+- Why: TASKS.md Phase 1 — regex PII matching (email/phone/card/IPv4) per D7
+- Result: Four functions (`is_email`, `is_phone`, `is_card`, `is_ipv4`) using Python `re` module. Deliberately permissive (bias toward recall). `tests/test_pii_matcher.py` — `16 passed, 45 subtests` covering valid PII formats (multiple variants per type), invalid strings, embedded text, None handling. Fast (0.10s), deterministic, offline.
+- Commit: uncommitted
+
 ## 2026-08-04 — Validate OCR detector against a real application screenshot
 - Changed: tests/test_ocr_detector.py (added TestOCRDetectorRealScreenshot + os import); docs/current-state.md, tasks.md
 - Why: OCR was only validated on synthetic cv2.putText frames; needed validation against a realistic UI screenshot (tests/assets/ocr_real_screen.png) before moving on

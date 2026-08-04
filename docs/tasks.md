@@ -25,8 +25,10 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Validated: `tests/test_ocr_detector.py` — `10 passed`. Covers normal UI text, email, phone, IPv4, credit card, small text, plus None/empty/blank-frame guards and a no-text graphics frame. All returned bboxes asserted in-bounds. Text checked leniently (key token present). Frames synthesized with OpenCV at test time (no fixtures, no network).
 - [x] Validate OCR detector against a realistic application screenshot
   - Validated: `tests/test_ocr_detector.py::TestOCRDetectorRealScreenshot` against `tests/assets/ocr_real_screen.png` (1536×1024 mock PixelVeil dashboard). `17 passed` total. All 5 planted values recognized exactly, each in its own in-bounds box (labels split from values — the label/value split is expected and accounted for): Name `John Doe`, Email `john.doe@example.com`, Phone `9876543210`, IPv4 `192.168.1.105`, Card `4111 1111 1111 1111`. Representative UI subset (`PixelVeil Test Account`, `Account Information`, `Account Settings`, `Privacy Configuration`) also detected. `core/ocr_detector.py` unchanged — no implementation bug found.
-- [ ] `core/pii_matcher.py` — regex patterns for email, phone, credit card, IP
-- [ ] Unit test each regex pattern against valid + invalid sample strings
+- [x] `core/pii_matcher.py` — regex patterns for email, phone, credit card, IP
+  - Implemented: `is_email()`, `is_phone()` (US 10-digit), `is_card()` (13-19 digits), `is_ipv4()`. Built on Python's `re` module per D7. Deliberately permissive (bias toward recall) — false positive only sends an extra box to the redactor; false negative is a privacy failure.
+- [x] Unit test each regex pattern against valid + invalid sample strings
+  - Validated: `tests/test_pii_matcher.py` — `16 passed, 45 subtests`. Each pattern tested against known-good PII formats (multiple variants) and clearly-invalid strings. Covers embedded text (e.g. "Email: user@example.com"), None input, and edge cases. Fast, deterministic, offline (no OCR machinery, just string matching).
 - [ ] `core/redactor.py` — draw blur, solid box, and fake-data text onto a frame given bboxes
 - [ ] `utils/fake_data.py` — generate placeholder text per PII type (fake name, fake email, etc.)
 - [ ] `core/zone_manager.py` — store/apply user-defined static zones to a frame
