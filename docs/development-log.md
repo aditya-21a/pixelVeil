@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-04 — Phase 2 fixtures: deterministic test videos generator
+- Changed: tests/make_sample_videos.py (new); docs/current-state.md, tasks.md, known-issues.md, development-log.md
+- Why: TASKS.md Phase 2 first item — build the planted-content test videos from TESTING.md §2 before any validation/UI
+- Result: `tests/make_sample_videos.py` deterministically builds all 5 fixtures under `tests/sample_videos/` (OpenCV frames; imageio-ffmpeg sine audio on the 2 that need it — no new dep, no randomness/network). All 960×540 / 10 fps / 60 frames (6 s) / 167–393 KB. Ground truth sanity-checked with core modules: faces 1 / 3 / 1 (basic/multi/mixed); OCR reads all 4 planted PII exactly (EMAIL john.doe@example.com, PHONE 9876543210, IP 192.168.1.105, CARD 4111 1111 1111 1111); zones panel fixed at (20,70,260,430) every frame; test_mixed has a scrolling PII ticker (ISSUE-003 repro). Audio present only on test_pii_text (440 Hz) and test_mixed (330 Hz).
+- Note: MP4s are already git-ignored (`tests/sample_videos/*.mp4`) — regenerate via the script, don't commit binaries, so no .gitignore change and no repo bloat. No core pipeline code touched. Phase 2 acceptance/end-to-end run NOT started (next items). No new decision.
+- Commit: uncommitted
+
 ## 2026-08-04 — OpenCV intermediate → ffmpeg audio mux in video_pipeline.py
 - Changed: core/video_pipeline.py, tests/test_video_pipeline.py; docs/current-state.md, tasks.md, known-issues.md, development-log.md
 - Why: TASKS.md Phase 1 (final core-pipeline task) — attach the original audio to the redacted output per D8

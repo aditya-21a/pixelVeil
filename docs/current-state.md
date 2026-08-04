@@ -26,6 +26,7 @@ Last updated: 2026-08-04
 | `utils/fake_data.py` | Implemented & tested | `generate(pii_type)` returns a clearly-synthetic placeholder for "EMAIL"/"PHONE"/"CARD"/"IP" (matches pii_matcher's types; name not supported per D7). stdlib `random` only. Reserved/documentation ranges so values are never real. `tests/test_fake_data.py` — `11 passed`. Not yet wired into the pipeline. |
 | `webtest/server.py` | Skeleton working | Flask routes serve empty template pages, not wired to pipeline yet |
 | `gui/app.py` | Not started | Blocked on core pipeline validation (see TASKS.md Phase 2 gate) |
+| `tests/sample_videos/*.mp4` | Phase 2 fixtures generated (not yet acceptance-run) | 5 deterministic fixtures built by `tests/make_sample_videos.py` (OpenCV frames; imageio-ffmpeg sine audio on 2 of them). 960×540, 10 fps, 6 s each, 167–393 KB. Faces (1 / 3 / 1) and all planted PII sanity-checked as detectable; git-ignored (regenerate, don't commit). See TASKS.md Phase 2 for per-file ground truth. |
 | Packaging (PyInstaller) | Not started | Blocked on GUI |
 
 ---

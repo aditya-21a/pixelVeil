@@ -52,7 +52,14 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Limitation: audio in a codec that can't be stream-copied into MP4 fails the mux (no re-encode fallback in v1) — ISSUE-004.
 
 ## Phase 2 — Pipeline Validation (before touching any UI)
-- [ ] Build 2-3 test videos with planted PII (see TESTING.md for exact cases)
+- [x] Build 2-3 test videos with planted PII (see TESTING.md for exact cases)
+  - Built all 5 TESTING.md §2 fixtures under `tests/sample_videos/` via a single deterministic OpenCV generator, `tests/make_sample_videos.py` (no randomness/network/downloads; regenerate rather than commit — the MP4s are already git-ignored by `tests/sample_videos/*.mp4`). All 960×540, 10 fps, 60 frames (6.0 s), 167–393 KB. Frames drawn with OpenCV; audio is a deterministic sine tone muxed via the existing imageio-ffmpeg dep on the two fixtures that need it.
+    - `test_faces_basic.mp4` — `single_frontal_face.jpg` fit to frame, static. Ground truth: **1 frontal face** (sanity-checked: `detect_faces` → 1). No audio.
+    - `test_faces_multi.mp4` — `multiple_faces.jpg` fit to frame, static. Ground truth: **3 faces** (sanity-checked: `detect_faces` → 3). No audio.
+    - `test_pii_text.mp4` — mock "Acme Admin" dashboard. Ground truth PII (all reserved/doc values): EMAIL `john.doe@example.com`, PHONE `9876543210`, IP `192.168.1.105`, CARD `4111 1111 1111 1111` (sanity-checked: OCR reads all four exactly). **Audio: yes** (440 Hz sine).
+    - `test_mixed.mp4` — `single_frontal_face.jpg` (1 face) + static PII panel (EMAIL `john.doe@example.com`, PHONE `9876543210`) + a **scrolling** bottom ticker carrying CARD `4111 1111 1111 1111` / IP `192.168.1.105` that moves each frame — the intended repro for ISSUE-003 (moving PII between OCR samples). **Audio: yes** (330 Hz sine).
+    - `test_zones.mp4` — mock "CRM Workspace" whose left sidebar panel sits at **fixed pixel coords `(x=20, y=70, w=260, h=430)` on every frame** (a moving ticket counter + circle elsewhere prove the panel is static while the rest changes). No PII, no audio — isolates static-zone behavior.
+  - Not run yet (next Phase 2 items): full end-to-end pipeline / acceptance scoring, blur-vs-fake-data confirmation, audio-in-sync check.
 - [ ] Run full pipeline end-to-end on each test video
 - [ ] Confirm: all planted faces blurred
 - [ ] Confirm: all planted PII detected and handled (both blur mode and fake-data mode)
