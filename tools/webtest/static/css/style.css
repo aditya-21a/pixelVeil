@@ -137,7 +137,10 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 .stages { width: 100%; border-collapse: collapse; font-size: 13px; }
 .stages th, .stages td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .stages th { color: var(--muted); font-weight: 600; }
-.state.idle { color: var(--muted); }
+.state.idle, .state.pending { color: var(--muted); }
+.state.running { color: var(--accent); font-weight: 600; }
+.state.complete { color: #15803D; font-weight: 600; }
+.state.error { color: #B91C1C; font-weight: 600; }
 
 .log {
   font-family: Consolas, "Courier New", monospace;  /* design.md 2.2: mono log only */
@@ -147,6 +150,9 @@ h2 { font-size: 15px; margin: 0 0 12px; }
   padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
+  max-height: 260px;
+  overflow-y: auto;
+  white-space: pre-wrap;
   margin: 0;
 }
 

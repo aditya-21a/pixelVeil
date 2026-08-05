@@ -8,13 +8,20 @@ docs/DECISIONS.md D10).
 
 Upload screen state (video reference, mode, drawn zones) is held in a simple
 in-memory store keyed by an upload id. It is intentionally process-local and
-non-persistent — this is a single-user local harness — and is the reference the
-next task ("wire Process Video to video_pipeline.py") will read from. Zones are
-stored as (x, y, w, h) tuples in ORIGINAL video-pixel coordinates, exactly the
-format core.zone_manager.ZoneManager.add_zone() expects.
+non-persistent — this is a single-user local harness. Zones are stored as
+(x, y, w, h) tuples in ORIGINAL video-pixel coordinates, exactly the format
+core.zone_manager.ZoneManager.add_zone() expects.
+
+Processing (Screen 2) runs the real core.video_pipeline.process_video() in a
+background daemon thread (see job.py) so the request never blocks; the browser
+polls /job/<uid> for live progress, per-stage status, and the technical log.
+Only one job runs at a time (single-user local harness — no queue/DB/Celery,
+per DECISIONS.md D10/D20). The uploaded source (uploads/) and the processed
+output (outputs/) are kept in separate directories.
 """
 
 import os
+import threading
 import uuid
 
 import cv2
@@ -29,6 +36,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from . import upload_support
+from .job import ProcessingJob
 
 app = Flask(__name__)
 
@@ -36,14 +44,21 @@ app = Flask(__name__)
 # with a clear 413 rather than exhausting memory.
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 GiB
 
-UPLOAD_DIR = os.path.join(app.root_path, "uploads")
+UPLOAD_DIR = os.path.join(app.root_path, "uploads")    # uploaded source videos
+OUTPUT_DIR = os.path.join(app.root_path, "outputs")    # processed output videos
 
 VALID_MODES = ("blur", "fake_data")
 
-# upload id -> {"video_path", "frame_path", "width", "height", "mode", "zones"}
-# Process-local; see module docstring. Not thread-safe by design (local, single
-# user, Flask dev server).
+# upload id -> {"video_path", "frame_path", "width", "height", "mode", "zones",
+#               and (once processing starts) "job", "output_path"}
+# Process-local; see module docstring. Not thread-safe by design for the upload
+# fields (local, single user, Flask dev server); the background job manages its
+# own locking for the fields the worker thread mutates.
 _STATE = {}
+
+# Guards the single-job invariant across concurrent /process requests.
+_JOB_LOCK = threading.Lock()
+_ACTIVE_JOB_UID = None
 
 
 # --- helpers -----------------------------------------------------------------
@@ -72,7 +87,10 @@ def upload():
 
 @app.route("/processing")
 def processing():
-    return render_template("processing.html", active="processing")
+    # `job` query param (set by the Upload screen's redirect) tells the page
+    # which job to poll; a direct visit with no param shows the idle state.
+    return render_template("processing.html", active="processing",
+                           job_id=request.args.get("job", ""))
 
 
 @app.route("/results")
@@ -210,27 +228,63 @@ def delete_zone():
 
 @app.route("/process", methods=["POST"])
 def process():
-    """Placeholder for the Process Video action.
+    """Start processing the uploaded video in a background job.
 
-    Intentionally does NOT call core.video_pipeline.process_video() — wiring the
-    pipeline is the next Phase 3 task. This returns a controlled 501 with the
-    exact state (video reference, mode, zones) the next task will feed in, and
-    also guards the "process only after a valid video is loaded" rule at the API
-    level: an unknown/absent id is rejected.
+    Runs core.video_pipeline.process_video() off the request thread (job.py) so
+    the UI can navigate to /processing and poll live progress. Guards:
+      * an unknown/absent upload id is rejected (process only after a valid
+        upload) — 400;
+      * only one job runs at a time in this local harness, so a request made
+        while another job is still active is rejected — 409 (duplicate-start
+        protection).
+    The uploaded source and the processed output are kept in separate dirs.
     """
+    global _ACTIVE_JOB_UID
     data = request.get_json(silent=True) or {}
-    st = _STATE.get(data.get("id"))
+    uid = data.get("id")
+    st = _STATE.get(uid)
     if not st:
         return _err(400, "No video loaded — upload a valid video first.")
+
+    with _JOB_LOCK:
+        active = _STATE.get(_ACTIVE_JOB_UID, {}).get("job") if _ACTIVE_JOB_UID else None
+        if active is not None and active.is_active():
+            return _err(409, "A processing job is already running; wait for it to finish.")
+
+        out_dir = os.path.join(OUTPUT_DIR, uid)
+        os.makedirs(out_dir, exist_ok=True)
+        output_path = os.path.join(out_dir, "redacted_" + os.path.basename(st["video_path"]))
+
+        # Zones are stored as [x, y, w, h] lists; pass them as tuples — exactly
+        # the (x, y, w, h) form ZoneManager.add_zone() (inside process_video)
+        # expects. process_video is reached only through its public API.
+        job = ProcessingJob(
+            uid,
+            st["video_path"],
+            output_path,
+            st["mode"],
+            [tuple(z) for z in st["zones"]],
+        )
+        st["job"] = job
+        st["output_path"] = output_path
+        _ACTIVE_JOB_UID = uid
+        job.start()
+
     return jsonify({
-        "status": "not_implemented",
-        "message": "Video loaded and ready; pipeline wiring is the next task.",
-        "id": data["id"],
-        "video_path": st["video_path"],
-        "mode": st["mode"],
-        "zones": st["zones"],
-        "num_zones": len(st["zones"]),
-    }), 501
+        "id": uid,
+        "status": job.status,
+        "poll_url": url_for("job_status", uid=uid),
+    }), 202
+
+
+@app.route("/job/<uid>")
+def job_status(uid):
+    """Live job snapshot for polling: progress, per-stage panel, and log."""
+    st = _STATE.get(uid)
+    job = st.get("job") if st else None
+    if job is None:
+        return _err(404, "No processing job for this upload.")
+    return jsonify(job.snapshot())
 
 
 @app.route("/state/<uid>")
@@ -248,4 +302,6 @@ def too_large(_exc):
 
 if __name__ == "__main__":
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    app.run(debug=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    # threaded=True so a poll request is served while the worker thread runs.
+    app.run(debug=True, threaded=True)

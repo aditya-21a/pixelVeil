@@ -23,6 +23,7 @@ import os
 import shutil
 import sys
 import unittest
+from unittest import mock
 
 import numpy as np
 import cv2
@@ -38,9 +39,11 @@ SAMPLE_DIR = os.path.join(REPO_ROOT, "tests", "sample_videos")
 
 
 def _clear_uploads():
-    """Remove anything the harness wrote under its uploads dir (git-ignored)."""
+    """Remove anything the harness wrote under its uploads/outputs dirs (git-ignored)."""
     server._STATE.clear()
+    server._ACTIVE_JOB_UID = None
     shutil.rmtree(server.UPLOAD_DIR, ignore_errors=True)
+    shutil.rmtree(server.OUTPUT_DIR, ignore_errors=True)
 
 
 def _make_video_bytes(w=64, h=48, n=3, fps=10.0):
@@ -201,15 +204,25 @@ class TestUploadRoutes(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("upload a valid video", r.get_json()["error"])
 
-    def test_process_after_upload_hits_placeholder_not_pipeline(self):
+    def test_process_after_upload_starts_background_job(self):
+        # /process now starts the real pipeline in a background job (wired in the
+        # Processing task). process_video is mocked so no OCR runs here; the full
+        # job behavior is covered by tests/test_webtest_processing.py.
         uid = self._upload(_make_video_bytes(), "clip.mp4").get_json()["id"]
-        r = self.client.post("/process", json={"id": uid})
-        # 501: ready, but pipeline wiring is the next task (process_video not called)
-        self.assertEqual(r.status_code, 501)
-        body = r.get_json()
-        self.assertEqual(body["status"], "not_implemented")
-        self.assertEqual(body["mode"], "blur")
-        self.assertEqual(body["num_zones"], 0)
+        fake = mock.Mock(return_value={
+            "frames_processed": 1, "faces_blurred": 0,
+            "pii_by_type": {"EMAIL": 0, "PHONE": 0, "CARD": 0, "IP": 0},
+            "zones_applied": 0,
+        })
+        try:
+            with mock.patch("core.video_pipeline.process_video", fake):
+                r = self.client.post("/process", json={"id": uid})
+                server._STATE[uid]["job"].join(5)
+            self.assertEqual(r.status_code, 202)
+            self.assertEqual(r.get_json()["id"], uid)
+            self.assertTrue(fake.called)
+        finally:
+            server._ACTIVE_JOB_UID = None
 
     def test_zone_create_and_delete(self):
         # video 100x80, drawn on a 50x40 canvas -> coords double

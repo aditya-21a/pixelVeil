@@ -2,43 +2,49 @@
 {% block title %}Processing{% endblock %}
 
 {% block content %}
-<!-- Screen 2 — Processing (design.md 2.2). Static placeholders only:
-     live progress, per-stage counts, log streaming, and frame preview are
-     wired in later Phase 3 tasks, not here. -->
-<h1>Processing</h1>
-<p class="lede">A live debug console for the pipeline — progress, per-stage
-  status, a scrolling log, and the current frame with detection boxes.</p>
+<!-- Screen 2 — Processing (design.md 2.2). Live progress bar, per-stage status
+     panel, and scrolling technical log, driven by polling /job/<uid> (see
+     static/js/app.js). The current-frame preview with detection-box overlays is
+     the NEXT Phase 3 task (it needs extra pipeline observability) and is left as
+     a static placeholder here. `data-job-id` is set by the Upload redirect. -->
+<div id="processingRoot" data-job-id="{{ job_id }}">
+  <h1>Processing</h1>
+  <p class="lede">A live debug console for the pipeline — progress, per-stage
+    status, and a scrolling log.</p>
 
-<section class="card">
-  <h2>Overall progress</h2>
-  <div class="progress"><div class="progress-fill" style="width: 0%"></div></div>
-  <p class="muted">Frame 0 of 0 · elapsed 00:00 · idle</p>
-</section>
+  <section class="card">
+    <h2>Overall progress</h2>
+    <div class="progress"><div id="progressFill" class="progress-fill" style="width: 0%"></div></div>
+    <p id="progressText" class="muted">Frame 0 of 0 · elapsed 0.0s · idle</p>
+  </section>
 
-<section class="card">
-  <h2>Pipeline stages</h2>
-  <table class="stages">
-    <thead><tr><th>Stage</th><th>State</th><th>Count</th></tr></thead>
-    <tbody>
-      <tr><td>face_detector</td><td class="state idle">idle</td><td>—</td></tr>
-      <tr><td>ocr_detector</td><td class="state idle">idle</td><td>—</td></tr>
-      <tr><td>pii_matcher</td><td class="state idle">idle</td><td>—</td></tr>
-      <tr><td>zone_manager</td><td class="state idle">idle</td><td>—</td></tr>
-      <tr><td>redactor</td><td class="state idle">idle</td><td>—</td></tr>
-      <tr><td>video writer / ffmpeg mux</td><td class="state idle">idle</td><td>—</td></tr>
-    </tbody>
-  </table>
-</section>
+  <section class="card">
+    <h2>Pipeline stages</h2>
+    <table class="stages">
+      <thead><tr><th>Stage</th><th>State</th><th>Detail</th></tr></thead>
+      <tbody id="stageRows">
+        <tr><td>face_detector</td><td class="state idle">idle</td><td>—</td></tr>
+        <tr><td>ocr_detector</td><td class="state idle">idle</td><td>—</td></tr>
+        <tr><td>pii_matcher</td><td class="state idle">idle</td><td>—</td></tr>
+        <tr><td>zone_manager</td><td class="state idle">idle</td><td>—</td></tr>
+        <tr><td>redactor</td><td class="state idle">idle</td><td>—</td></tr>
+        <tr><td>video writer / ffmpeg mux</td><td class="state idle">idle</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
 
-<section class="card">
-  <h2>Technical log</h2>
-  <pre class="log">[--:--:--] waiting for a job — log streaming wired in a later task</pre>
-</section>
+  <section class="card">
+    <h2>Technical log</h2>
+    <pre id="logPanel" class="log">[--:--:--] waiting for a job…</pre>
+  </section>
 
-<section class="card">
-  <h2>Current frame</h2>
-  <div class="placeholder-box preview">Frame preview with face / PII / zone boxes appears here during processing.</div>
-</section>
+  <section class="card">
+    <h2>Current frame</h2>
+    <div class="placeholder-box preview">Frame preview with face / PII / zone
+      boxes appears here during processing (next Phase 3 task).</div>
+  </section>
 
-<button class="btn" disabled>Cancel</button>
+  <p id="processingDone" class="muted" hidden></p>
+  <a class="btn" href="{{ url_for('results') }}">View results</a>
+</div>
 {% endblock %}

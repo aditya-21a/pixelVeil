@@ -19,6 +19,13 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 *(entries go here, most recent at the top)*
 
+## 2026-08-05 — Phase 3: Processing screen — pipeline wired via background job, live progress/stage/log
+- Changed: tools/webtest/job.py (new — ProcessingJob), server.py (/process starts job → 202, /job/<uid> polling, uploads/ vs outputs/, 409 single-job guard), templates/processing.html, static/js/app.js (Process→POST /process→navigate, poll /job every 500 ms), static/css/style.css (stage-state + scrollable log); tests/test_webtest_processing.py (new), tests/test_webtest_upload.py (501→202 test + cleanup helper clears outputs/, resets _ACTIVE_JOB_UID); .gitignore (tools/webtest/outputs/); docs/current-state.md, tasks.md, DECISIONS.md (D20), development-log.md
+- Why: TASKS.md Phase 3 — wire Process Video to video_pipeline via Flask + Processing screen progress bar/stage panel + live technical log (polling). Continuation of an interrupted session.
+- Result: `/process` runs `core.video_pipeline.process_video()` (public API only) in one daemon thread, returns 202 without blocking; browser polls `/job/<uid>` (~500 ms) for progress bar, per-stage table, and scrolling mono log — all numbers derived strictly from the pipeline's `progress_callback` + summary (no fabricated internals). One job at a time (dup start → 409); source/output in separate dirs; pipeline exceptions → controlled error state; summary retained for Results. Focused `tests/test_webtest_upload.py`+`test_webtest_processing.py` → **41 passed**; full `python -m pytest tests/test_*.py` → **154 passed, 80 subtests** (+15). No temp dirs left under uploads/ or outputs/. core/ untouched.
+- Note: new decision D20 (in-memory daemon-thread job + polling, single-job, no queue/DB/Celery; SSE deferred). Resolves the pre-existing dangling `D10/D20` reference in server.py. Live current-frame preview / detection-box overlay is intentionally still a placeholder — the NEXT Phase 3 task. No new dependency.
+- Commit: uncommitted
+
 ## 2026-08-05 — Phase 3: Upload screen — drag/drop upload, first-frame zone drawing, mode toggle
 - Changed: tools/webtest/server.py (Upload API), upload_support.py (new pure helpers), templates/upload.html, static/js/app.js, static/css/style.css, .gitignore (uploads/); tests/test_webtest_upload.py (new); docs/current-state.md, tasks.md, DECISIONS.md, development-log.md
 - Why: TASKS.md Phase 3 — Upload screen: file picker/drag-drop, mode toggle, zone-drawing canvas on first frame (building on the harness skeleton)

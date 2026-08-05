@@ -232,23 +232,31 @@
     function (el) { el.addEventListener("change", syncMode); }
   );
 
-  // --- process (placeholder) ----------------------------------------------
+  // --- process (start background job, then go to the Processing screen) ----
   processBtn.addEventListener("click", function () {
     if (!upload) return;
-    processStatus.textContent = "Submitting…";
+    processBtn.disabled = true; // prevent a double-start from a double-click
+    processStatus.textContent = "Starting…";
     fetch("/process", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: upload.id }),
     })
-      .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
       .then(function (res) {
-        // 501 is expected here — pipeline wiring is the next task.
-        processStatus.textContent =
-          (res.j.message || "Submitted.") +
-          " (mode: " + res.j.mode + ", zones: " + res.j.num_zones + ")";
+        if (!res.ok) {
+          // 409 = a job is already running; other codes = real error.
+          processStatus.textContent = res.j.error || "Could not start processing.";
+          processBtn.disabled = false;
+          return;
+        }
+        // Navigate to the live Processing screen for this job.
+        window.location.href = "/processing?job=" + encodeURIComponent(upload.id);
       })
-      .catch(function () { processStatus.textContent = "Process request failed."; });
+      .catch(function () {
+        processStatus.textContent = "Process request failed.";
+        processBtn.disabled = false;
+      });
   });
 
   // --- wiring: file picker + drag/drop ------------------------------------
@@ -275,4 +283,99 @@
     var dt = e.dataTransfer;
     if (dt && dt.files && dt.files[0]) handleFile(dt.files[0]);
   });
+})();
+
+// ===========================================================================
+// Processing screen (docs/design.md Screen 2). Polls /job/<uid> for live
+// progress, per-stage status, and the technical log. Bails on other pages.
+// The live current-frame preview / detection-box overlay is a later task.
+// ===========================================================================
+(function () {
+  "use strict";
+
+  var root = document.getElementById("processingRoot");
+  if (!root) return; // not the Processing page
+
+  var jobId = root.getAttribute("data-job-id");
+  var progressFill = document.getElementById("progressFill");
+  var progressText = document.getElementById("progressText");
+  var stageRows = document.getElementById("stageRows");
+  var logPanel = document.getElementById("logPanel");
+  var doneMsg = document.getElementById("processingDone");
+
+  if (!jobId) {
+    progressText.textContent = "No active job — start one from the Upload screen.";
+    return;
+  }
+
+  var POLL_MS = 500;
+  var logPinnedToBottom = true;
+
+  // Let the user scroll up to inspect a moment without being yanked back down.
+  logPanel.addEventListener("scroll", function () {
+    var atBottom = logPanel.scrollHeight - logPanel.scrollTop - logPanel.clientHeight < 4;
+    logPinnedToBottom = atBottom;
+  });
+
+  function renderStages(stages) {
+    stageRows.innerHTML = "";
+    stages.forEach(function (s) {
+      var tr = document.createElement("tr");
+      var name = document.createElement("td");
+      name.textContent = s.name;
+      var state = document.createElement("td");
+      state.className = "state " + s.state;
+      state.textContent = s.state;
+      var detail = document.createElement("td");
+      detail.textContent = s.detail;
+      tr.appendChild(name);
+      tr.appendChild(state);
+      tr.appendChild(detail);
+      stageRows.appendChild(tr);
+    });
+  }
+
+  function render(snap) {
+    progressFill.style.width = snap.percent + "%";
+    progressText.textContent =
+      "Frame " + snap.frame + " of " + (snap.total || "?") +
+      " · " + snap.percent + "% · elapsed " + snap.elapsed + "s · " + snap.status;
+
+    renderStages(snap.stages);
+
+    logPanel.textContent = (snap.log && snap.log.length)
+      ? snap.log.join("\n")
+      : "[--:--:--] waiting for output…";
+    if (logPinnedToBottom) logPanel.scrollTop = logPanel.scrollHeight;
+
+    if (snap.status === "complete") {
+      doneMsg.hidden = false;
+      doneMsg.textContent =
+        "Done. " + (snap.summary ? snap.summary.frames_processed + " frames, " +
+        snap.summary.faces_blurred + " faces blurred." : "");
+    } else if (snap.status === "error") {
+      doneMsg.hidden = false;
+      doneMsg.className = "error-msg";
+      doneMsg.textContent = "Processing failed: " + (snap.error || "unknown error");
+    }
+  }
+
+  function poll() {
+    fetch("/job/" + encodeURIComponent(jobId))
+      .then(function (r) {
+        if (!r.ok) throw new Error("job not found");
+        return r.json();
+      })
+      .then(function (snap) {
+        render(snap);
+        if (snap.status === "running" || snap.status === "pending") {
+          window.setTimeout(poll, POLL_MS);
+        }
+      })
+      .catch(function () {
+        progressText.textContent = "Lost contact with the job.";
+      });
+  }
+
+  poll();
 })();
