@@ -21,6 +21,15 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 
 ## Open Issues
 
+### ISSUE-005 — Results "Original" preview blank for mp4v source files (browser codec limitation)
+- **Status:** Open (accepted v1 limitation)
+- **Severity:** Minor
+- **Affected files:** `tools/webtest/server.py` (`/video/<uid>/original`), `tests/sample_videos/*.mp4`
+- **Description:** The Results screen serves the original uploaded file byte-for-byte via `/video/<uid>/original`. When the source is encoded with mp4v (MPEG-4 Part 2) — as all `tests/sample_videos/*.mp4` fixtures are, produced by OpenCV `VideoWriter_fourcc(*"mp4v")` — HTML5 `<video>` in Chrome/Edge/Firefox shows duration and controls but a blank image. VLC, QuickTime, Windows Media Player, and direct download all play it correctly. The **processed output** is always browser-playable H.264 (fixed this session). The original preview is a cosmetic read-only convenience; it does not affect the redacted output, the download, or any core pipeline behaviour.
+- **Reproduction:** Run the harness with any `tests/sample_videos/*.mp4` fixture and open the Results screen; the "Original" `<video>` control shows duration but a blank image. Real H.264 screen recordings (OBS/Loom/QuickTime) render correctly in both panes.
+- **Workaround:** Download the original from its URL and play externally, or use an H.264 source for the harness. Transcoding the source on ingest (at upload time) would fix the in-browser preview but was out of scope for this pass (user constraint: "do not reprocess videos from the Results page" / "do not change unrelated pipeline logic").
+- **Notes:** The sample video generator (`tests/make_sample_videos.py`) uses OpenCV `VideoWriter_fourcc(*"mp4v")` for its fixtures — intentional for portability, but mp4v is not browser-decodable. To fix the fixture preview without changing the generator, a one-time ffmpeg re-encode of the sample files to H.264 would suffice; deferred. Not hidden with CSS per user instruction: "inspect/report the exact codec/MIME/browser incompatibility rather than hiding it with CSS."
+
 ### ISSUE-004 — Audio not copyable into MP4 fails the mux (no re-encode fallback)
 - **Status:** Open (accepted v1 limitation)
 - **Severity:** Minor

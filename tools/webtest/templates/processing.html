@@ -50,7 +50,9 @@
     </div>
   </section>
 
+  <!-- On completion, app.js reveals a single "View results" action here,
+       linked to /results?job=<uid> for THIS job. No static fallback button
+       below it — a second one duplicated the action and dropped the job id. -->
   <p id="processingDone" class="muted" hidden></p>
-  <a class="btn" href="{{ url_for('results') }}">View results</a>
 </div>
 {% endblock %}

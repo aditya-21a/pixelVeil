@@ -81,6 +81,35 @@ def _public_state(uid, st):
     }
 
 
+def _current_job_uid():
+    """The upload id the nav should treat as the 'current job', or "".
+
+    A page navigation must never lose the active job (a background ProcessingJob
+    keeps running regardless), so the top-nav Processing/Results links need a job
+    id to carry. Prefer the job the current page is already about (its ?job=
+    query param), then fall back to the most-recently started job
+    (`_ACTIVE_JOB_UID`). Only return an id we still hold state for AND that has a
+    job started — so the links point somewhere real. This is a read-only lookup;
+    it never starts, stops, or mutates a job.
+    """
+    for candidate in (request.args.get("job"), _ACTIVE_JOB_UID):
+        st = _STATE.get(candidate) if candidate else None
+        if st and st.get("job") is not None:
+            return candidate
+    return ""
+
+
+@app.context_processor
+def inject_current_job():
+    """Expose the current job id to every template (used by the nav in base.html).
+
+    Kept context-aware rather than hardcoded in the templates/JS: with a job
+    present, the Processing/Results tabs link to that job so navigating away and
+    back reconnects to the SAME in-memory job instead of an idle/blank screen.
+    """
+    return {"active_job_uid": _current_job_uid()}
+
+
 # --- screens (static pages; see base.html for nav) ---------------------------
 @app.route("/")
 def upload():

@@ -26,10 +26,11 @@ static zones still run on every frame regardless of the OCR sample rate.
 
 Output (architecture.md 6.8/6.9, DECISIONS.md D8): processed frames are written
 to a temporary video-only intermediate via OpenCV, then ffmpeg (bundled with
-`imageio-ffmpeg`) re-muxes that video with the **original** audio track into the
-final `output_path`. Both streams are copied, not re-encoded. The intermediate
-is always removed, on success and on failure. A source with no audio still
-produces a valid video-only output.
+`imageio-ffmpeg`) muxes that video with the **original** audio track into the
+final `output_path`. The video is transcoded from the intermediate's `mp4v` to
+browser-playable **H.264** in that step (so HTML5 `<video>` can render it); the
+audio is copied, not re-encoded. The intermediate is always removed, on success
+and on failure. A source with no audio still produces a valid video-only output.
 """
 
 import os
@@ -73,9 +74,15 @@ def _mux_audio(processed_video_path, source_path, output_path):
     Muxes the video stream from `processed_video_path` (the OpenCV-written
     intermediate) with the audio stream from the original `source_path` into
     `output_path`, using the ffmpeg binary bundled with `imageio-ffmpeg`
-    (DECISIONS.md D8). Streams are copied, not re-encoded — the processed video
-    is preserved exactly and the original audio is preserved without
-    reprocessing. The audio mapping is optional (``1:a:0?``) so a source with no
+    (DECISIONS.md D8). The video is transcoded to **H.264 / yuv420p** here: the
+    OpenCV intermediate is MPEG-4 Part 2 (`mp4v`), which VLC/QuickTime play but
+    HTML5 `<video>` in Chrome/Edge/Firefox cannot decode (controls + duration
+    show, image stays blank). Re-encoding to H.264 in this step — which already
+    runs for every output — makes the redacted result universally playable,
+    including in the harness's Results screen, without touching any
+    detection/OCR/redaction logic (the pixels are identical, only the codec
+    changes). The original audio is still stream-copied (`-c:a copy`, no
+    re-encode). The audio mapping is optional (``1:a:0?``) so a source with no
     audio track still produces a valid video-only output.
 
     Args are passed to ffmpeg as a subprocess argument list (never a shell
@@ -91,7 +98,9 @@ def _mux_audio(processed_video_path, source_path, output_path):
         "-i", source_path,            # input 1: original (audio source)
         "-map", "0:v:0",              # video from the processed stream
         "-map", "1:a:0?",             # audio from the original, if it exists
-        "-c:v", "copy",               # keep processed video exactly as written
+        "-c:v", "libx264",            # transcode mp4v -> H.264 for browsers
+        "-pix_fmt", "yuv420p",        # 4:2:0 so browsers/QuickTime can decode
+        "-movflags", "+faststart",    # moov atom up front for progressive play
         "-c:a", "copy",               # preserve original audio, no re-encode
         "-shortest",                  # guard against audio outlasting the video
         output_path,
@@ -224,8 +233,9 @@ def process_video(
             fps = 25.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         # mp4v is broadly compatible for the OpenCV intermediate; the final
-        # container is produced by the ffmpeg mux step (D8), which copies this
-        # video stream unchanged and attaches the original audio.
+        # container is produced by the ffmpeg mux step (D8), which transcodes
+        # this video stream to browser-playable H.264 and attaches the original
+        # audio.
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 
         # PII regions carried over from the most recent OCR sample. Each entry

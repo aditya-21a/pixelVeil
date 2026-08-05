@@ -7,13 +7,16 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <!-- Simple top nav (design.md section 3): 4 tabs, single-column pages. -->
+  <!-- Simple top nav (design.md section 3): 4 tabs, single-column pages.
+       Processing/Results carry the current job id (active_job_uid, injected by
+       server.py) when one exists, so navigating away and back reconnects to the
+       SAME background job instead of losing it. Upload/Settings never need it. -->
   <header class="topbar">
     <span class="brand">PixelVeil</span>
     <nav class="tabs">
       <a href="{{ url_for('upload') }}"     class="tab {{ 'active' if active == 'upload' }}">Upload</a>
-      <a href="{{ url_for('processing') }}" class="tab {{ 'active' if active == 'processing' }}">Processing</a>
-      <a href="{{ url_for('results') }}"    class="tab {{ 'active' if active == 'results' }}">Results</a>
+      <a href="{{ url_for('processing', job=active_job_uid) if active_job_uid else url_for('processing') }}" class="tab {{ 'active' if active == 'processing' }}">Processing</a>
+      <a href="{{ url_for('results', job=active_job_uid) if active_job_uid else url_for('results') }}"    class="tab {{ 'active' if active == 'results' }}">Results</a>
       <a href="{{ url_for('settings') }}"   class="tab {{ 'active' if active == 'settings' }}">Settings</a>
     </nav>
     <span class="harness-note">local test harness</span>

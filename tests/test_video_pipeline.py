@@ -71,6 +71,24 @@ def _has_audio_stream(path):
     return "Audio:" in result.stderr
 
 
+def _video_codec(path):
+    """Return the first video stream's codec name (e.g. 'h264', 'mpeg4').
+
+    `ffmpeg -i` prints e.g. "... Video: h264 (High) (avc1 / ...), yuv420p, ..."
+    to stderr; take the token right after "Video:". Used to prove the pipeline
+    output is browser-playable H.264, not the OpenCV intermediate's mp4v.
+    """
+    result = subprocess.run(
+        [_ffmpeg(), "-nostdin", "-i", path],
+        capture_output=True, text=True,
+    )
+    for line in result.stderr.splitlines():
+        if "Video:" in line:
+            after = line.split("Video:", 1)[1].strip()
+            return after.split()[0].split(",")[0]
+    return ""
+
+
 def _frame_count(path):
     cap = cv2.VideoCapture(path)
     try:
@@ -453,7 +471,8 @@ class TestProcessVideoAudioMux(unittest.TestCase):
         self.assertEqual(_frame_count(self.out), 4)
 
     def test_processed_video_stream_intact(self):
-        # Dimensions/FPS and frame count survive the OpenCV write + ffmpeg copy.
+        # Dimensions/FPS and frame count survive the OpenCV write + ffmpeg H.264
+        # transcode.
         _write_video_with_audio(self.inp, n_frames=6, w=160, h=120, fps=10.0)
         video_pipeline.process_video(self.inp, self.out, mode="blur")
         cap = cv2.VideoCapture(self.out)
@@ -515,9 +534,30 @@ class TestProcessVideoAudioMux(unittest.TestCase):
             video_pipeline.process_video(self.inp, self.out, mode="blur")
         self.assertIsInstance(captured["args"], list)
         self.assertNotIn("shell", captured["kwargs"])  # no shell=True
-        # Copies streams (no re-encode) and maps optional audio.
-        self.assertIn("copy", captured["args"])
+        # Video is transcoded to browser-playable H.264; audio is stream-copied;
+        # the optional audio map is present.
+        self.assertIn("libx264", captured["args"])
+        self.assertIn("copy", captured["args"])       # audio stream copy
         self.assertIn("1:a:0?", captured["args"])
+
+    def test_output_video_is_browser_playable_h264(self):
+        # ROOT-CAUSE REGRESSION: the OpenCV intermediate is mp4v (MPEG-4 Part 2),
+        # which HTML5 <video> in Chrome/Edge/Firefox cannot decode (controls +
+        # duration show, image stays blank). The ffmpeg step must transcode the
+        # final output to H.264 so the Results screen actually renders the video.
+        _write_video_with_audio(self.inp, n_frames=6)
+        video_pipeline.process_video(self.inp, self.out, mode="blur")
+        self.assertEqual(_video_codec(self.out), "h264")
+        self.assertTrue(_has_audio_stream(self.out))  # audio still preserved
+
+    def test_output_h264_even_without_audio(self):
+        # A source with no audio (OpenCV mp4v write) must still yield an H.264,
+        # browser-playable, video-only output.
+        _write_video(self.inp, n_frames=4)
+        self.assertEqual(_video_codec(self.inp), "mpeg4")  # the mp4v intermediate
+        video_pipeline.process_video(self.inp, self.out, mode="blur")
+        self.assertEqual(_video_codec(self.out), "h264")
+        self.assertFalse(_has_audio_stream(self.out))
 
 
 class TestProcessVideoPreviewCallback(unittest.TestCase):
