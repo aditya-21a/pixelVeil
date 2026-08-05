@@ -213,5 +213,108 @@ class TestConfigurablePatterns(unittest.TestCase):
                     pii_matcher.set_patterns({"EMAIL": bad})
 
 
+class TestFindPii(unittest.TestCase):
+    """find_pii() reports each PII value's type AND character span, so the
+    pipeline can redact only the value and leave a surrounding label visible.
+    The span is a half-open slice: text[start:end] == value."""
+
+    def _one(self, text):
+        """Assert exactly one match and return it as (type, start, end, value)."""
+        matches = pii_matcher.find_pii(text)
+        self.assertEqual(len(matches), 1, f"expected one match in {text!r}: {matches}")
+        return matches[0]
+
+    def test_label_plus_email_span_excludes_label(self):
+        text = "Email: john.doe@example.com"
+        pii_type, start, end, value = self._one(text)
+        self.assertEqual(pii_type, "EMAIL")
+        self.assertEqual(value, "john.doe@example.com")
+        self.assertEqual(text[start:end], value)
+        self.assertEqual(start, len("Email: "))   # label not included
+        self.assertEqual(end, len(text))
+
+    def test_label_plus_phone_span_excludes_label(self):
+        text = "Phone: 9876543210"
+        pii_type, start, end, value = self._one(text)
+        self.assertEqual(pii_type, "PHONE")
+        self.assertEqual(value, "9876543210")
+        self.assertEqual(text[start:end], value)
+        self.assertEqual(start, len("Phone: "))
+
+    def test_label_plus_card_span_excludes_label(self):
+        text = "CARD 4111 1111 1111 1111"
+        pii_type, start, end, value = self._one(text)
+        self.assertEqual(pii_type, "CARD")
+        self.assertEqual(value, "4111 1111 1111 1111")
+        self.assertEqual(text[start:end], value)
+        self.assertEqual(start, len("CARD "))
+        self.assertEqual(end, len(text))
+
+    def test_label_plus_ip_span_excludes_label(self):
+        text = "IP 192.168.1.105"
+        pii_type, start, end, value = self._one(text)
+        self.assertEqual(pii_type, "IP")
+        self.assertEqual(value, "192.168.1.105")
+        self.assertEqual(text[start:end], value)
+        self.assertEqual(start, len("IP "))
+
+    def test_value_only_box_spans_whole_string(self):
+        # When the OCR box is just the value, the span covers the whole string
+        # (so the pipeline's derived bbox equals the original OCR bbox).
+        text = "john.doe@example.com"
+        pii_type, start, end, value = self._one(text)
+        self.assertEqual(pii_type, "EMAIL")
+        self.assertEqual((start, end), (0, len(text)))
+        self.assertEqual(value, text)
+
+    def test_variable_width_label_is_not_hardcoded(self):
+        # A longer label must shift the span accordingly — proving the offset is
+        # derived from the match, not a fixed label width.
+        text = "Email Address: john.doe@example.com"
+        pii_type, start, end, value = self._one(text)
+        self.assertEqual(pii_type, "EMAIL")
+        self.assertEqual(value, "john.doe@example.com")
+        self.assertEqual(start, len("Email Address: "))
+        self.assertEqual(text[start:end], value)
+
+    def test_various_separators_between_label_and_value(self):
+        for text, label in [
+            ("Email - john.doe@example.com", "Email - "),
+            ("Contact: john.doe@example.com", "Contact: "),
+            ("Phone Number: 9876543210", "Phone Number: "),
+            ("CARD: 4111 1111 1111 1111", "CARD: "),
+            ("IP Address = 192.168.1.105", "IP Address = "),
+        ]:
+            with self.subTest(text=text):
+                matches = pii_matcher.find_pii(text)
+                self.assertEqual(len(matches), 1, matches)
+                _pii_type, start, end, value = matches[0]
+                self.assertEqual(start, len(label), f"label boundary in {text!r}")
+                self.assertEqual(text[start:end], value)
+
+    def test_ip_not_split_into_phone_by_precedence(self):
+        # The broad PHONE/CARD digit shapes must not carve an IP into a separate
+        # lower-precedence match: exactly one IP span is returned.
+        matches = pii_matcher.find_pii("IP 192.168.1.105")
+        self.assertEqual([m[0] for m in matches], ["IP"])
+
+    def test_multiple_values_each_get_a_span(self):
+        text = "mail john@x.com call 555-123-4567"
+        matches = pii_matcher.find_pii(text)
+        types = {m[0] for m in matches}
+        self.assertIn("EMAIL", types)
+        self.assertIn("PHONE", types)
+        # Spans are sorted and each slices back to its own value.
+        starts = [m[1] for m in matches]
+        self.assertEqual(starts, sorted(starts))
+        for _t, s, e, v in matches:
+            self.assertEqual(text[s:e], v)
+
+    def test_no_pii_returns_empty(self):
+        self.assertEqual(pii_matcher.find_pii("Dashboard settings"), [])
+        self.assertEqual(pii_matcher.find_pii(""), [])
+        self.assertEqual(pii_matcher.find_pii(None), [])
+
+
 if __name__ == "__main__":
     unittest.main()

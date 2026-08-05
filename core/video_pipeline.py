@@ -47,25 +47,50 @@ from core import redactor
 from core.zone_manager import ZoneManager
 from utils import fake_data
 
-# OCR text is classified to a PII type in this order. EMAIL and IP are checked
-# before CARD/PHONE because their punctuation makes them unambiguous, whereas
-# the digit-oriented card/phone patterns are broader; checking the specific
-# shapes first avoids an IP or email being mis-typed as a phone number. The
-# type string is what utils.fake_data.generate() expects.
-_PII_CLASSIFIERS = (
-    ("EMAIL", pii_matcher.is_email),
-    ("IP", pii_matcher.is_ipv4),
-    ("CARD", pii_matcher.is_card),
-    ("PHONE", pii_matcher.is_phone),
-)
+# OCR text is matched to PII values by pii_matcher.find_pii(), which returns
+# each value's type *and its character span* within the OCR string, resolving
+# overlapping/ambiguous matches by its own documented precedence. The span lets
+# this module redact only the value's sub-region of the OCR box, leaving any
+# label ("Email:", "CARD", ...) in the same box visible. The type string is what
+# utils.fake_data.generate() expects.
 
 
-def _classify_pii(text):
-    """Return the PII type string for `text`, or None if it isn't PII."""
-    for pii_type, matcher in _PII_CLASSIFIERS:
-        if matcher(text):
-            return pii_type
-    return None
+def _span_to_bbox(ocr_bbox, text, start, end):
+    """Map a character span ``[start, end)`` of an OCR string to a tighter bbox
+    inside `ocr_bbox`.
+
+    RapidOCR returns one box per recognized *line*, not per glyph, so exact
+    per-character coordinates are unavailable. This approximates each character's
+    horizontal extent as a uniform fraction of the line width and carves out the
+    sub-range covering the matched value — a deterministic mapping bounded by the
+    original box. This is the documented approximation (see known-issues
+    ISSUE-006): it assumes roughly uniform character width, so with proportional
+    fonts the value edge can be off by a few pixels, but the region always stays
+    inside the OCR box and always covers the value.
+
+    Vertical extent (`y`, `h`) is preserved — a value sits on the same line as
+    its label. When the whole string is the value (``start == 0`` and
+    ``end == len(text)``) the result is exactly `ocr_bbox` (integer-exact), so a
+    value-only OCR box redacts precisely as before this tightening existed.
+
+    Returns an ``(x, y, w, h)`` tuple, never narrower than 1px.
+    """
+    x, y, w, h = ocr_bbox
+    n = len(text)
+    if n <= 0 or w <= 0:
+        return ocr_bbox
+    # Defensive clamp of the span into the string bounds.
+    start = max(0, min(start, n))
+    end = max(start, min(end, n))
+    x0 = x + int(round(w * start / n))
+    x1 = x + int(round(w * end / n))
+    # Keep both edges inside the original box, and guarantee positive width.
+    x0 = max(x, min(x0, x + w))
+    x1 = max(x, min(x1, x + w))
+    if x1 <= x0:
+        x1 = min(x0 + 1, x + w)
+        x0 = x1 - 1
+    return (x0, y, x1 - x0, h)
 
 
 def _mux_audio(processed_video_path, source_path, output_path):
@@ -130,7 +155,10 @@ def process_video(
     classify PII → redact faces (always blurred) → redact matched PII (per
     `mode`) → apply static zones → write frame. OCR (detect text → classify)
     runs only on sampled frames (every `ocr_sample_rate`-th frame); between
-    samples the last PII detections are persisted and re-applied.
+    samples the last PII detections are persisted and re-applied. When an OCR
+    box holds a label plus a value (e.g. "Email: a@b.com"), only the matched
+    value's sub-region is redacted (via pii_matcher.find_pii spans mapped by
+    `_span_to_bbox`); the label stays visible.
 
     Args:
         input_path: path to the source video file.
@@ -279,17 +307,22 @@ def process_video(
                 detections = ocr_detector.detect_text(frame)
                 persisted_pii = []
                 for text, bbox in detections:
-                    pii_type = _classify_pii(text)
-                    if pii_type is None:
-                        continue
-                    # Generate the fake-data replacement once, at sample time,
-                    # so it stays fixed until the next sample (no flicker).
-                    replacement = (
-                        fake_data.generate(pii_type)
-                        if mode == "fake_data"
-                        else None
-                    )
-                    persisted_pii.append((pii_type, bbox, replacement))
+                    # find_pii reports each PII value's type AND its character
+                    # span within `text`, so we redact only the value region of
+                    # the OCR box (a label like "Email:" in the same box stays
+                    # visible). Multiple values in one box each get their own
+                    # region. A value-only box yields the full bbox unchanged.
+                    for pii_type, start, end, _value in pii_matcher.find_pii(text):
+                        value_bbox = _span_to_bbox(bbox, text, start, end)
+                        # Generate the fake-data replacement once, at sample
+                        # time, so it stays fixed until the next sample (no
+                        # flicker), per value.
+                        replacement = (
+                            fake_data.generate(pii_type)
+                            if mode == "fake_data"
+                            else None
+                        )
+                        persisted_pii.append((pii_type, value_bbox, replacement))
 
             # 4. redact faces — always blurred, regardless of mode
             for fbox in face_boxes:

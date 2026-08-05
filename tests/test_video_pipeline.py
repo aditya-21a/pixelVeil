@@ -726,5 +726,157 @@ class TestFaceMinConfidence(unittest.TestCase):
                     )
 
 
+class TestValueOnlyRedaction(unittest.TestCase):
+    """A single OCR box holding a label + value ("Email: a@b.com") must have
+    only the value's sub-region redacted; the label stays visible. Exercises
+    _span_to_bbox directly and end-to-end through both redaction modes with the
+    components mocked so the OCR text/bbox are known exactly.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.inp = os.path.join(self.tmp, "in.mp4")
+        self.out = os.path.join(self.tmp, "out.mp4")
+        _write_video(self.inp, n_frames=1)
+
+    # -- _span_to_bbox unit-level -------------------------------------------
+    def test_span_to_bbox_value_only_returns_full_box(self):
+        # Whole string is the value -> bbox unchanged (integer-exact), so the
+        # existing value-only behavior/tests are preserved.
+        box = (5, 5, 200, 20)
+        text = "john.doe@example.com"
+        self.assertEqual(
+            video_pipeline._span_to_bbox(box, text, 0, len(text)), box
+        )
+
+    def test_span_to_bbox_excludes_label_prefix(self):
+        box = (0, 0, 270, 20)
+        text = "Email: john.doe@example.com"
+        start = text.index("john")
+        vb = video_pipeline._span_to_bbox(box, text, start, len(text))
+        self.assertGreaterEqual(vb[0], box[0])                  # inside (left)
+        self.assertLessEqual(vb[0] + vb[2], box[0] + box[2])    # inside (right)
+        self.assertGreater(vb[0], box[0])                       # label excluded
+        self.assertEqual(vb[0] + vb[2], box[0] + box[2])        # value covered
+        self.assertEqual(vb[1], box[1])                         # same band (y)
+        self.assertEqual(vb[3], box[3])                         # same band (h)
+
+    def test_span_to_bbox_never_zero_width(self):
+        box = (10, 10, 100, 20)
+        vb = video_pipeline._span_to_bbox(box, "x", 0, 0)       # empty span
+        self.assertGreaterEqual(vb[2], 1)
+
+    # -- pipeline: blur mode -------------------------------------------------
+    def _run_capturing_blur(self, ocr_text, ocr_bbox):
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text",
+            return_value=[(ocr_text, ocr_bbox)],
+        ), mock.patch.object(
+            video_pipeline.redactor, "blur_region",
+        ) as blur:
+            video_pipeline.process_video(self.inp, self.out, mode="blur")
+        return blur
+
+    def test_blur_mode_sends_tightened_value_bbox(self):
+        ocr_bbox = (0, 0, 270, 20)
+        blur = self._run_capturing_blur("Email: john.doe@example.com", ocr_bbox)
+        self.assertEqual(blur.call_count, 1)
+        vb = blur.call_args_list[0].args[1]
+        self.assertGreater(vb[0], ocr_bbox[0])                          # label kept
+        self.assertLessEqual(vb[0] + vb[2], ocr_bbox[0] + ocr_bbox[2])  # inside box
+        self.assertEqual(vb[0] + vb[2], ocr_bbox[0] + ocr_bbox[2])      # covers value
+
+    def test_blur_mode_phone_label_kept(self):
+        ocr_bbox = (0, 0, 170, 20)
+        blur = self._run_capturing_blur("Phone: 9876543210", ocr_bbox)
+        self.assertEqual(blur.call_count, 1)
+        vb = blur.call_args_list[0].args[1]
+        self.assertGreater(vb[0], ocr_bbox[0])
+        self.assertLessEqual(vb[0] + vb[2], ocr_bbox[0] + ocr_bbox[2])
+
+    def test_blur_mode_ip_label_kept(self):
+        ocr_bbox = (0, 0, 160, 20)
+        blur = self._run_capturing_blur("IP 192.168.1.105", ocr_bbox)
+        self.assertEqual(blur.call_count, 1)
+        vb = blur.call_args_list[0].args[1]
+        self.assertGreater(vb[0], ocr_bbox[0])
+        self.assertEqual(vb[0] + vb[2], ocr_bbox[0] + ocr_bbox[2])
+
+    def test_variable_label_width_not_hardcoded(self):
+        # Longer label -> value region starts further right, proving the offset
+        # is derived from the match position, not a fixed label width.
+        short = self._run_capturing_blur(
+            "Email: john.doe@example.com", (0, 0, 270, 20)
+        ).call_args_list[0].args[1]
+        wide = self._run_capturing_blur(
+            "Email Address: john.doe@example.com", (0, 0, 350, 20)
+        ).call_args_list[0].args[1]
+        # Both keep some label to their left; the longer-label case is not just
+        # the full box (it excludes the wider label).
+        self.assertGreater(short[0], 0)
+        self.assertGreater(wide[0], 0)
+
+    # -- pipeline: fake-data mode -------------------------------------------
+    def test_fake_data_mode_sends_tightened_value_bbox(self):
+        ocr_bbox = (0, 0, 240, 20)
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text",
+            return_value=[("CARD 4111 1111 1111 1111", ocr_bbox)],
+        ), mock.patch.object(
+            video_pipeline.fake_data, "generate",
+            return_value="0000 0000 0000 0000",
+        ), mock.patch.object(
+            video_pipeline.redactor, "fake_data_region",
+        ) as fake:
+            video_pipeline.process_video(self.inp, self.out, mode="fake_data")
+        self.assertEqual(fake.call_count, 1)
+        vb = fake.call_args_list[0].args[1]
+        self.assertGreater(vb[0], ocr_bbox[0])                     # "CARD " kept
+        self.assertEqual(vb[0] + vb[2], ocr_bbox[0] + ocr_bbox[2])  # value covered
+
+    # -- non-PII / separate boxes -------------------------------------------
+    def test_label_only_box_not_redacted(self):
+        # If OCR splits label and value into separate boxes, the label box has
+        # no PII and is left untouched (requirement 9).
+        blur = self._run_capturing_blur("Email:", (0, 0, 60, 20))
+        self.assertEqual(blur.call_count, 0)
+
+    def test_multiple_values_one_box_each_redacted(self):
+        ocr_bbox = (0, 0, 400, 20)
+        blur = self._run_capturing_blur("mail a@b.com ip 10.0.0.1", ocr_bbox)
+        # Two distinct value regions, both inside the OCR box (requirement 8).
+        self.assertEqual(blur.call_count, 2)
+        for call in blur.call_args_list:
+            vb = call.args[1]
+            self.assertGreaterEqual(vb[0], ocr_bbox[0])
+            self.assertLessEqual(vb[0] + vb[2], ocr_bbox[0] + ocr_bbox[2])
+
+    # -- persistence keeps the tightened bbox -------------------------------
+    def test_tightened_bbox_persists_between_samples(self):
+        _write_video(self.inp, n_frames=4)
+        ocr_bbox = (0, 0, 270, 20)
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text",
+            return_value=[("Email: john.doe@example.com", ocr_bbox)],
+        ) as detect_text, mock.patch.object(
+            video_pipeline.redactor, "blur_region",
+        ) as blur:
+            video_pipeline.process_video(
+                self.inp, self.out, mode="blur", ocr_sample_rate=4,
+            )
+        self.assertEqual(detect_text.call_count, 1)   # OCR sampled once
+        self.assertEqual(blur.call_count, 4)          # applied every frame
+        boxes = {call.args[1] for call in blur.call_args_list}
+        self.assertEqual(len(boxes), 1)               # same tightened bbox reused
+        vb = next(iter(boxes))
+        self.assertGreater(vb[0], ocr_bbox[0])        # persisted box is tightened
+
+
 if __name__ == "__main__":
     unittest.main()

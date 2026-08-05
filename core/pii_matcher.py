@@ -7,8 +7,14 @@ Public API:
     is_phone(text) -> bool
     is_card(text) -> bool
     is_ipv4(text) -> bool
+    find_pii(text) -> list[(pii_type, start, end, value)]
     get_patterns() / get_default_patterns() -> {type: regex_string}
     set_patterns({type: regex_string}) / reset_patterns()
+
+The ``is_*()`` functions answer only "does this text contain PII of type X?".
+``find_pii()`` additionally reports *where* each PII value sits (its character
+span), so a caller holding one OCR box can redact only the value's sub-region
+and leave a surrounding label ("Email:", "CARD", ...) visible.
 
 Each is_*() function returns True if the given text matches the corresponding
 PII pattern. These are designed for OCR output, so they're deliberately
@@ -66,6 +72,16 @@ _IPV4_PATTERN = re.compile(
 
 # The four supported PII types, in this fixed set (v1 adds no new categories).
 PII_TYPES = ("EMAIL", "PHONE", "CARD", "IP")
+
+# Precedence for resolving overlapping matches in find_pii(). EMAIL and IP are
+# resolved before CARD and PHONE because their punctuation makes them
+# unambiguous, whereas the digit-oriented CARD/PHONE shapes are broad and could
+# otherwise claim the digits of an IP or the local part of an email. When two
+# patterns match overlapping characters, the earlier (higher-precedence) type
+# wins and the overlapping lower-precedence match is dropped. This mirrors the
+# single-type classification order the pipeline used previously, so a box that
+# holds only one value still classifies exactly as it did before.
+_MATCH_PRECEDENCE = ("EMAIL", "IP", "CARD", "PHONE")
 
 # Default compiled patterns, keyed by PII type. These are the shipped behavior;
 # the four is_*() functions consult `_active_patterns` (below), which starts as
@@ -216,3 +232,66 @@ def is_ipv4(text):
     if not text:
         return False
     return _active_patterns["IP"].search(text) is not None
+
+
+def find_pii(text):
+    """Locate every PII value inside `text` and report where each one sits.
+
+    Returns a list of ``(pii_type, start, end, value)`` tuples, one per matched
+    PII value, sorted by start position. ``start``/``end`` are character offsets
+    into `text` forming a half-open slice, so ``text[start:end] == value``. The
+    caller (video_pipeline) maps that span onto a tighter sub-region of the OCR
+    box, so only the value — not a leading label like ``"Email:"`` or ``"CARD"``
+    — gets redacted.
+
+    ``value`` is the exact matched substring. The patterns are ``\\b``-anchored,
+    so surrounding whitespace and label text are naturally excluded; no manual
+    stripping of leading/trailing spaces is needed.
+
+    When two patterns match overlapping characters (e.g. the broad PHONE/CARD
+    digit shapes catching part of an IP address), the higher-precedence type in
+    ``_MATCH_PRECEDENCE`` wins and the overlapping lower-precedence match is
+    dropped. A box holding a single value therefore classifies to exactly the
+    same type the pipeline assigned before this function existed.
+
+    Multiple *non-overlapping* PII values in one string each get their own
+    tuple (e.g. an email and a phone on the same OCR line).
+
+    Args:
+        text: a string, typically one OCR detection box's recognized text.
+
+    Returns:
+        A list of ``(pii_type, start, end, value)`` tuples sorted by ``start``;
+        an empty list for empty/None text or text containing no PII.
+
+    Example:
+        >>> find_pii("Email: john.doe@example.com")
+        [('EMAIL', 7, 27, 'john.doe@example.com')]
+        >>> find_pii("no pii here")
+        []
+    """
+    if not text:
+        return []
+
+    # (start, end, pii_type, value) for spans accepted so far, in precedence
+    # order. finditer within one pattern already yields non-overlapping matches;
+    # the overlap guard below only needs to reject a lower-precedence span that
+    # collides with an already-accepted higher-precedence one.
+    accepted = []
+    for pii_type in _MATCH_PRECEDENCE:
+        pattern = _active_patterns[pii_type]
+        for match in pattern.finditer(text):
+            start, end = match.start(), match.end()
+            if end <= start:
+                continue  # zero-width match: nothing to redact
+            overlaps = any(
+                start < a_end and a_start < end
+                for a_start, a_end, _, _ in accepted
+            )
+            if overlaps:
+                continue
+            accepted.append((start, end, pii_type, match.group()))
+
+    accepted.sort(key=lambda item: item[0])
+    return [(pii_type, start, end, value)
+            for start, end, pii_type, value in accepted]

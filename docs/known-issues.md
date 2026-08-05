@@ -21,6 +21,15 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 
 ## Open Issues
 
+### ISSUE-006 — Value redaction bbox is a proportional (per-line, not per-glyph) approximation
+- **Status:** Open (accepted v1 limitation, by design)
+- **Severity:** Minor
+- **Affected files:** `core/video_pipeline.py` (`_span_to_bbox`), `core/pii_matcher.py` (`find_pii`)
+- **Description:** When one OCR box holds a label plus a PII value ("Email: john.doe@example.com"), the pipeline now redacts only the value's sub-region, derived from the regex match's **character span** (`pii_matcher.find_pii`). RapidOCR returns one bounding box per recognized **line**, not per glyph, so exact per-character pixel coordinates are unavailable. `_span_to_bbox` therefore approximates each character's horizontal extent as a uniform fraction of the line width (`x + w * index / len(text)`). With a proportional/variable-width font this is not pixel-exact: the value region's left/right edge can be off by a few pixels versus the true glyph boundary. The mapping is deterministic and always bounded by the original OCR box, and is intentionally biased to still fully cover the value (the redaction never leaks the value); the only visible effect is that a few pixels of an adjacent space or the last label character may be covered, or a few pixels of padding may remain beside the value.
+- **Reproduction:** Process a frame whose OCR box mixes a label and a value in a proportional font; compare the redaction edge to the exact glyph boundary. In the deterministic `test_mixed.mp4` fixture (Hershey font, roughly even width) the split is visually clean — label "Email:" fully retained, value fully blurred (validated 2026-08-05: label sharpness retained 100%, value 0%).
+- **Workaround:** none needed for redaction safety — the value is always covered. Per-glyph precision would require either a per-character OCR mode or a heavier OCR engine exposing glyph boxes; deliberately **not** adopted (D17 keeps the ONNX RapidOCR backend, no new OCR dependency for coordinates). If a future engine exposes glyph geometry, `_span_to_bbox` is the single seam to tighten.
+- **Notes:** Do not "fix" by hardcoding known label widths or shrinking every OCR box by a fixed percentage — the region must derive from the actual match position (that was the explicit accuracy rule for this fix). The uniform-width approximation is the documented, deliberate tradeoff.
+
 ### ISSUE-005 — Results "Original" preview blank for mp4v source files (browser codec limitation)
 - **Status:** Open (accepted v1 limitation)
 - **Severity:** Minor
