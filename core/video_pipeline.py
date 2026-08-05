@@ -8,8 +8,8 @@ final output rather than OpenCV's VideoWriter alone.
 
 Public API:
     process_video(input_path, output_path, mode="blur", zones=None,
-                  ocr_sample_rate=1, progress_callback=None,
-                  preview_callback=None) -> dict
+                  ocr_sample_rate=1, face_min_confidence=None,
+                  progress_callback=None, preview_callback=None) -> dict
 
 This module is orchestration only: it reads frames, calls each component's
 existing public API, and writes frames back. It contains no face-detection,
@@ -110,6 +110,7 @@ def process_video(
     mode="blur",
     zones=None,
     ocr_sample_rate=1,
+    face_min_confidence=None,
     progress_callback=None,
     preview_callback=None,
 ):
@@ -137,6 +138,11 @@ def process_video(
             (architecture.md 6.4/6.5, 7). Must be a positive integer; ``1``
             means OCR on every frame. Face detection and static zones are
             unaffected — they run on every frame.
+        face_min_confidence: optional minimum face-detection confidence in
+            [0.0, 1.0], forwarded to face_detector.detect_faces(). ``None``
+            (the default) uses the detector's own default confidence, so
+            existing behavior is unchanged; a lower value blurs when less
+            certain (bias toward catching faces, per TESTING.md).
         progress_callback: optional callable(event: dict) invoked once per
             frame with {"frame", "total", "faces", "pii"} for the test harness.
         preview_callback: optional callable(event: dict) invoked once per frame,
@@ -172,6 +178,15 @@ def process_video(
         raise ValueError(
             f"ocr_sample_rate must be a positive integer, got {ocr_sample_rate!r}"
         )
+
+    if face_min_confidence is not None:
+        if isinstance(face_min_confidence, bool) \
+                or not isinstance(face_min_confidence, (int, float)) \
+                or not (0.0 <= face_min_confidence <= 1.0):
+            raise ValueError(
+                "face_min_confidence must be a number in [0.0, 1.0] or None, "
+                f"got {face_min_confidence!r}"
+            )
 
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
@@ -238,8 +253,15 @@ def process_video(
                         f"{intermediate_path!r}"
                     )
 
-            # 1. faces — detected on every frame (existing pipeline behavior)
-            face_boxes = face_detector.detect_faces(frame)
+            # 1. faces — detected on every frame (existing pipeline behavior).
+            # Forward a custom confidence only when supplied, so the detector's
+            # own default is used otherwise (unchanged behavior).
+            if face_min_confidence is None:
+                face_boxes = face_detector.detect_faces(frame)
+            else:
+                face_boxes = face_detector.detect_faces(
+                    frame, min_confidence=face_min_confidence
+                )
 
             # 2/3. text + classify — only on sampled frames (every Nth). Between
             # samples the previous detections in `persisted_pii` are reused.

@@ -116,8 +116,10 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 }
 .placeholder-box.preview { min-height: 140px; display: flex; align-items: center; justify-content: center; }
 
-.before-after { display: flex; gap: 16px; }
+.before-after { display: flex; gap: 16px; flex-wrap: wrap; }
 .before-after .placeholder-box { flex: 1; }
+.before-after figure.preview { flex: 1; min-width: 280px; margin: 0; }
+.before-after figure.preview figcaption { font-size: 13px; color: #666; margin-bottom: 6px; }
 
 /* --- form controls --- */
 .radio { display: block; margin: 6px 0; }
@@ -160,6 +162,19 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 .summary li { padding: 4px 0; }
 .patterns { margin: 0; padding-left: 18px; }
 .patterns li { padding: 2px 0; }
+
+/* --- settings screen --- */
+.pattern-input {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.settings-feedback { font-size: 13px; margin: 12px 0 0; }
+.settings-feedback.ok { color: #15803D; }
 
 /* --- upload screen --- */
 .dropzone { cursor: pointer; transition: border-color 0.15s, background 0.15s; }

@@ -22,6 +22,12 @@ import mediapipe as mp
 _DEFAULT_MODEL_SELECTION = 1
 _DEFAULT_MIN_CONFIDENCE = 0.5
 
+# Public alias for the default confidence, so callers (e.g. the test-harness
+# Settings screen) can display/reset to the shipped value without reaching into
+# a private name. detect_faces() still defaults to this when no override is
+# passed, so existing behavior is unchanged.
+DEFAULT_MIN_CONFIDENCE = _DEFAULT_MIN_CONFIDENCE
+
 # A FaceDetection instance is reusable across frames, so we cache one keyed by
 # its construction parameters instead of rebuilding the model every frame.
 _detector = None

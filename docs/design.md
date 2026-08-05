@@ -57,7 +57,7 @@ This level of detail is specifically so you can watch, in real time, exactly whi
 - Side-by-side (or toggle) **before/after** video preview using plain HTML `<video>` elements.
 - Summary panel: total faces blurred, total PII matches found (broken down by type: emails, phones, cards, IPs), total static zones applied.
 - **Download output video** button.
-- **"Flag an issue"** button — since this is a test tool, let yourself quickly note "missed this face" or "false positive here" while reviewing, timestamped, saved to a local log file for your own tracking during testing.
+- ~~**"Flag an issue"** button~~ — **dropped, not implemented (DECISIONS.md D22).** For this developer-only harness, manual misses ("missed this face", "false positive here") are recorded directly in `docs/known-issues.md` rather than through an in-app timestamped log. Do not implement this button.
 
 ### Screen 4 — Settings (for tuning during testing, not for end users)
 - OCR sampling rate (every N frames) — number input.

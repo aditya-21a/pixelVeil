@@ -37,6 +37,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from . import upload_support
+from . import settings_store
 from .job import ProcessingJob
 
 app = Flask(__name__)
@@ -96,12 +97,98 @@ def processing():
 
 @app.route("/results")
 def results():
-    return render_template("results.html", active="results")
+    """Results screen: before/after video preview, summary, and download.
+
+    Accessed via ?job=<uid> query param (set by the Processing screen when a job
+    completes). Shows the original uploaded video, the processed/redacted video,
+    and the real summary returned by process_video(). Gracefully handles unknown
+    job, still-running job, failed job, and missing-output states.
+    """
+    uid = request.args.get("job", "")
+    st = _STATE.get(uid)
+    job = st.get("job") if st else None
+
+    # Guard: unknown upload id
+    if not st:
+        return render_template("results.html", active="results",
+                               error="Unknown job — no upload found with that id.")
+
+    # Guard: no job started yet (shouldn't happen via normal flow, but guard it)
+    if job is None:
+        return render_template("results.html", active="results",
+                               error="No processing job found for this upload.")
+
+    # Guard: job still running
+    if job.is_active():
+        return render_template("results.html", active="results",
+                               error="Processing is still running — wait for it to finish.",
+                               job_url=url_for("processing", job=uid))
+
+    # Guard: job failed
+    if job.status == "error":
+        return render_template("results.html", active="results",
+                               error=f"Processing failed: {job.error or 'unknown error'}",
+                               job_url=url_for("processing", job=uid))
+
+    # Guard: job completed but output file missing (unlikely — ProcessingJob
+    # writes it before marking complete, but filesystem issues could delete it)
+    if not os.path.exists(st.get("output_path", "")):
+        return render_template("results.html", active="results",
+                               error="Output video file is missing (deleted or moved).")
+
+    # Happy path: job completed successfully and output exists
+    summary = job.summary or {}
+    return render_template("results.html", active="results",
+                           uid=uid,
+                           original_filename=os.path.basename(st["video_path"]),
+                           output_filename=os.path.basename(st["output_path"]),
+                           summary=summary)
 
 
 @app.route("/settings")
 def settings():
-    return render_template("settings.html", active="settings")
+    """Settings screen: current tuning values with editable controls.
+
+    Values come from the process-local settings_store (OCR sample rate, face
+    confidence, PII regex patterns) so the page always reflects what a newly
+    started job would use. Saving/resetting is done via the JSON API below.
+    """
+    return render_template("settings.html", active="settings",
+                           settings=settings_store.get_settings())
+
+
+@app.route("/settings/values")
+def settings_values():
+    """Current settings as JSON (used by the Settings screen after save/reset)."""
+    return jsonify(settings_store.get_settings())
+
+
+@app.route("/settings", methods=["POST"])
+def save_settings():
+    """Validate and apply a settings update; echo back the new settings.
+
+    Body: {ocr_sample_rate, face_min_confidence, pii_patterns:{EMAIL,PHONE,
+    CARD,IP}}. Any field may be omitted. Validation is all-or-nothing — an
+    invalid OCR rate, out-of-range confidence, or uncompilable regex is rejected
+    with 400 and the previous valid configuration is left untouched (in
+    particular, a bad regex never replaces the working patterns).
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        new_settings = settings_store.update_settings(
+            ocr_sample_rate=data.get("ocr_sample_rate"),
+            face_min_confidence=data.get("face_min_confidence"),
+            pii_patterns=data.get("pii_patterns"),
+        )
+    except ValueError as exc:
+        return _err(400, str(exc))
+    return jsonify(new_settings)
+
+
+@app.route("/settings/reset", methods=["POST"])
+def reset_settings():
+    """Restore all settings (OCR rate, face confidence, PII patterns) to defaults."""
+    return jsonify(settings_store.reset_settings())
 
 
 # --- Upload screen API -------------------------------------------------------
@@ -259,12 +346,18 @@ def process():
         # Zones are stored as [x, y, w, h] lists; pass them as tuples — exactly
         # the (x, y, w, h) form ZoneManager.add_zone() (inside process_video)
         # expects. process_video is reached only through its public API.
+        # Current Settings-screen values (OCR sample rate, face confidence) are
+        # read at start time so a job always uses the latest saved tuning; the
+        # PII patterns are applied globally in core.pii_matcher by the store.
+        proc_kwargs = settings_store.processing_kwargs()
         job = ProcessingJob(
             uid,
             st["video_path"],
             output_path,
             st["mode"],
             [tuple(z) for z in st["zones"]],
+            ocr_sample_rate=proc_kwargs["ocr_sample_rate"],
+            face_min_confidence=proc_kwargs["face_min_confidence"],
         )
         st["job"] = job
         st["output_path"] = output_path
@@ -308,6 +401,62 @@ def job_preview(uid):
     # Diagnostic frames change constantly; never let a proxy/browser cache them.
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@app.route("/video/<uid>/original")
+def video_original(uid):
+    """Serve the original uploaded video for before/after playback.
+
+    The path comes from server-controlled _STATE (set at upload from a decoded
+    file), never from a client-supplied path — a caller cannot request an
+    arbitrary filesystem location, only the video tied to a known upload id.
+    """
+    st = _STATE.get(uid)
+    if not st:
+        return _err(404, "Unknown upload id.")
+    path = st.get("video_path")
+    if not path or not os.path.exists(path):
+        return _err(404, "Original video file is missing.")
+    return send_file(path, mimetype="video/mp4", conditional=True)
+
+
+@app.route("/video/<uid>/processed")
+def video_processed(uid):
+    """Serve the processed/redacted output video for before/after playback.
+
+    Requires a completed job with an existing output file. The path is taken
+    from server-controlled _STATE, not from the client.
+    """
+    st = _STATE.get(uid)
+    job = st.get("job") if st else None
+    if job is None:
+        return _err(404, "No processing job for this upload.")
+    if job.status != "complete":
+        return _err(409, "Processed video is not ready yet.")
+    path = st.get("output_path")
+    if not path or not os.path.exists(path):
+        return _err(404, "Processed video file is missing.")
+    return send_file(path, mimetype="video/mp4", conditional=True)
+
+
+@app.route("/download/<uid>")
+def download_output(uid):
+    """Download the final processed video, preserving its actual filename.
+
+    Serves the existing completed output file from server-controlled _STATE
+    (never a client path) as an attachment with the real output filename.
+    """
+    st = _STATE.get(uid)
+    job = st.get("job") if st else None
+    if job is None:
+        return _err(404, "No processing job for this upload.")
+    if job.status != "complete":
+        return _err(409, "Output is not ready to download yet.")
+    path = st.get("output_path")
+    if not path or not os.path.exists(path):
+        return _err(404, "Output video file is missing.")
+    return send_file(path, mimetype="video/mp4", as_attachment=True,
+                     download_name=os.path.basename(path))
 
 
 @app.route("/state/<uid>")

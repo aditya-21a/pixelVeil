@@ -638,5 +638,53 @@ class TestProcessVideoPreviewCallback(unittest.TestCase):
         self.assertGreater(int(frame.mean()), 200)  # white ~255, black would be ~0
 
 
+class TestFaceMinConfidence(unittest.TestCase):
+    """The optional face_min_confidence pass-through (added for the Settings
+    screen). Default None preserves behavior; a supplied value must reach
+    face_detector.detect_faces; invalid values are rejected before processing."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.inp = os.path.join(self.tmp, "in.mp4")
+        self.out = os.path.join(self.tmp, "out.mp4")
+
+    def test_default_does_not_pass_confidence_override(self):
+        # No face_min_confidence -> detect_faces called with only the frame, so
+        # the detector's own default confidence applies (unchanged behavior).
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ) as detect_faces, mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text", return_value=[],
+        ):
+            _write_video(self.inp, n_frames=2, w=64, h=48)
+            video_pipeline.process_video(self.inp, self.out, mode="blur")
+        self.assertGreater(detect_faces.call_count, 0)
+        for call in detect_faces.call_args_list:
+            self.assertNotIn("min_confidence", call.kwargs)
+
+    def test_custom_confidence_reaches_detect_faces(self):
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ) as detect_faces, mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text", return_value=[],
+        ):
+            _write_video(self.inp, n_frames=2, w=64, h=48)
+            video_pipeline.process_video(
+                self.inp, self.out, mode="blur", face_min_confidence=0.8,
+            )
+        self.assertGreater(detect_faces.call_count, 0)
+        for call in detect_faces.call_args_list:
+            self.assertEqual(call.kwargs.get("min_confidence"), 0.8)
+
+    def test_invalid_confidence_rejected(self):
+        for bad in (-0.1, 1.5, "high", True):
+            with self.subTest(bad=bad):
+                _write_video(self.inp, n_frames=1, w=32, h=24)
+                with self.assertRaises(ValueError):
+                    video_pipeline.process_video(
+                        self.inp, self.out, mode="blur", face_min_confidence=bad,
+                    )
+
+
 if __name__ == "__main__":
     unittest.main()

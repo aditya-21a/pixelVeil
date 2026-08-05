@@ -125,13 +125,15 @@ class ProcessingJob:
     """
 
     def __init__(self, uid, input_path, output_path, mode, zones,
-                 ocr_sample_rate=1, runner=None, preview_every=_PREVIEW_EVERY):
+                 ocr_sample_rate=1, face_min_confidence=None, runner=None,
+                 preview_every=_PREVIEW_EVERY):
         self.uid = uid
         self.input_path = input_path
         self.output_path = output_path
         self.mode = mode
         self.zones = list(zones or [])
         self.ocr_sample_rate = ocr_sample_rate
+        self.face_min_confidence = face_min_confidence
         # Injectable for tests: defaults to the real pipeline entry point, so
         # web tests can substitute a fake and never run OCR.
         self._runner = runner or video_pipeline.process_video
@@ -186,6 +188,7 @@ class ProcessingJob:
                 mode=self.mode,
                 zones=self.zones,
                 ocr_sample_rate=self.ocr_sample_rate,
+                face_min_confidence=self.face_min_confidence,
                 progress_callback=self._on_progress,
                 preview_callback=self._on_preview,
             )

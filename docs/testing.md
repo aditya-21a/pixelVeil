@@ -8,7 +8,7 @@ Given the product's entire value proposition is "you don't need to manually chec
 
 - **Bias toward catching false negatives over false positives.** A face or PII string that's missed defeats the product's purpose. A region that's over-blurred is a minor annoyance. When tuning thresholds, always err toward "blur when uncertain."
 - **No feature ships to the UI phase until it passes its test cases against planted test data.** Pipeline validation (Phase 2 in TASKS.md) happens before any GUI work.
-- **Track every miss, even small ones**, in `KNOWN_ISSUES.md` (or the Results screen's "Flag an issue" log during manual review) — don't let known limitations quietly disappear.
+- **Track every miss, even small ones**, directly in `docs/known-issues.md` during manual review — don't let known limitations quietly disappear. (The originally-planned Results "Flag an issue" in-app log was dropped; see DECISIONS.md D22.)
 
 ---
 
@@ -74,7 +74,7 @@ Keep these checked into `tests/sample_videos/` per the architecture.md file stru
 For every test video processed during Phase 2 validation:
 1. Watch the full output video.
 2. For every miss (face or PII not redacted) or false positive (something redacted that shouldn't be), note the timestamp and what was missed/wrongly flagged.
-3. Log these in the Results screen's "Flag an issue" feature (per design.md) or directly in `KNOWN_ISSUES.md`.
+3. Log these directly in `KNOWN_ISSUES.md`.
 4. Calculate a rough miss rate per category (faces, emails, phones, cards, IPs) — this becomes your honest, quotable accuracy baseline, useful both for your own confidence and for any future marketing claims (don't market "100% guaranteed" — see roadmap.md's honest caveat on this).
 
 ---

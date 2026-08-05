@@ -5,7 +5,7 @@
 // real video dimensions; this file only captures display-space coordinates.
 //
 // Later Phase 3 tasks own Processing/Results/Settings behaviour and the real
-// pipeline wiring — Process Video here only hits a controlled placeholder.
+// pipeline wiring — Process Video here only starts the background job.
 
 (function () {
   "use strict";
@@ -368,9 +368,11 @@
 
     if (snap.status === "complete") {
       doneMsg.hidden = false;
-      doneMsg.textContent =
+      doneMsg.innerHTML =
         "Done. " + (snap.summary ? snap.summary.frames_processed + " frames, " +
-        snap.summary.faces_blurred + " faces blurred." : "");
+        snap.summary.faces_blurred + " faces blurred. " : "") +
+        '<a class="btn primary" href="/results?job=' +
+        encodeURIComponent(jobId) + '">View results</a>';
     } else if (snap.status === "error") {
       doneMsg.hidden = false;
       doneMsg.className = "error-msg";
@@ -396,4 +398,102 @@
   }
 
   poll();
+})();
+
+// ===========================================================================
+// Settings screen (docs/design.md Screen 4). Functional tuning: OCR sample
+// rate, face-detection confidence, and the four PII regex patterns. Saving
+// hits the /settings JSON API (server-side validation is authoritative); a
+// newly started job then uses these values. Bails on other pages.
+// ===========================================================================
+(function () {
+  "use strict";
+
+  var root = document.getElementById("settingsRoot");
+  if (!root) return; // not the Settings page
+
+  var saveUrl = root.getAttribute("data-save-url");
+  var resetUrl = root.getAttribute("data-reset-url");
+
+  var ocrRate = document.getElementById("ocrRate");
+  var faceConf = document.getElementById("faceConf");
+  var faceConfValue = document.getElementById("faceConfValue");
+  var saveBtn = document.getElementById("saveSettings");
+  var resetBtn = document.getElementById("resetSettings");
+  var feedback = document.getElementById("settingsFeedback");
+
+  var PII_TYPES = ["EMAIL", "PHONE", "CARD", "IP"];
+
+  // Keep the confidence read-out in sync while dragging the slider.
+  faceConf.addEventListener("input", function () {
+    faceConfValue.textContent = Number(faceConf.value).toFixed(2);
+  });
+
+  function showFeedback(msg, ok) {
+    feedback.hidden = false;
+    feedback.textContent = msg;
+    feedback.className = "settings-feedback " + (ok ? "ok" : "error-msg");
+  }
+
+  // Reflect a settings dict (from the API) back into the form controls.
+  function applyValues(s) {
+    ocrRate.value = s.ocr_sample_rate;
+    faceConf.value = s.face_min_confidence;
+    faceConfValue.textContent = Number(s.face_min_confidence).toFixed(2);
+    PII_TYPES.forEach(function (t) {
+      var el = document.getElementById("pattern" + t);
+      if (el && s.pii_patterns && s.pii_patterns[t] !== undefined) {
+        el.value = s.pii_patterns[t];
+      }
+    });
+  }
+
+  function collectPatterns() {
+    var patterns = {};
+    PII_TYPES.forEach(function (t) {
+      var el = document.getElementById("pattern" + t);
+      if (el) patterns[t] = el.value;
+    });
+    return patterns;
+  }
+
+  saveBtn.addEventListener("click", function () {
+    saveBtn.disabled = true;
+    var body = {
+      ocr_sample_rate: ocrRate.value,
+      face_min_confidence: faceConf.value,
+      pii_patterns: collectPatterns(),
+    };
+    fetch(saveUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          // Validation rejected the change; the server kept the last valid
+          // config, so the form still reflects a usable state.
+          showFeedback(res.j.error || "Could not save settings.", false);
+          return;
+        }
+        applyValues(res.j);
+        showFeedback("Settings saved. The next run will use them.", true);
+      })
+      .catch(function () { showFeedback("Save request failed.", false); })
+      .then(function () { saveBtn.disabled = false; });
+  });
+
+  resetBtn.addEventListener("click", function () {
+    resetBtn.disabled = true;
+    fetch(resetUrl, { method: "POST" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { showFeedback("Could not reset settings.", false); return; }
+        applyValues(res.j);
+        showFeedback("Settings reset to defaults.", true);
+      })
+      .catch(function () { showFeedback("Reset request failed.", false); })
+      .then(function () { resetBtn.disabled = false; });
+  });
 })();

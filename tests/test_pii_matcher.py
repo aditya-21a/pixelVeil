@@ -13,6 +13,7 @@ always match, while still checking that clearly-unrelated text does not.
 
 import unittest
 
+from core import pii_matcher
 from core.pii_matcher import is_email, is_phone, is_card, is_ipv4
 
 
@@ -148,6 +149,68 @@ class TestIPv4Pattern(unittest.TestCase):
 
     def test_none_is_false(self):
         self.assertFalse(is_ipv4(None))
+
+
+class TestConfigurablePatterns(unittest.TestCase):
+    """The get/set/reset pattern API added for the Settings screen. Patterns are
+    process-global module state, so every test restores the shipped defaults in
+    tearDown — an override must never leak into another test (or file)."""
+
+    def tearDown(self):
+        pii_matcher.reset_patterns()
+
+    def test_get_patterns_returns_all_four_types_as_strings(self):
+        patterns = pii_matcher.get_patterns()
+        self.assertEqual(set(patterns), set(pii_matcher.PII_TYPES))
+        for value in patterns.values():
+            self.assertIsInstance(value, str)
+
+    def test_get_defaults_match_active_before_any_override(self):
+        self.assertEqual(pii_matcher.get_patterns(),
+                         pii_matcher.get_default_patterns())
+
+    def test_set_patterns_changes_matching(self):
+        # Narrow EMAIL to only match a literal token; a real email then misses.
+        self.assertTrue(is_email("user@example.com"))
+        pii_matcher.set_patterns({"EMAIL": r"SECRET_TOKEN"})
+        self.assertFalse(is_email("user@example.com"))
+        self.assertTrue(is_email("here is SECRET_TOKEN inline"))
+        # Other types are untouched by a partial update.
+        self.assertTrue(is_ipv4("192.168.1.1"))
+
+    def test_reset_restores_default_behavior(self):
+        pii_matcher.set_patterns({"PHONE": r"NOPE"})
+        self.assertFalse(is_phone("555-123-4567"))
+        pii_matcher.reset_patterns()
+        self.assertTrue(is_phone("555-123-4567"))
+        self.assertEqual(pii_matcher.get_patterns(),
+                         pii_matcher.get_default_patterns())
+
+    def test_invalid_regex_rejected_without_corrupting_active(self):
+        before = pii_matcher.get_patterns()
+        with self.assertRaises(ValueError):
+            pii_matcher.set_patterns({"EMAIL": r"("})  # unbalanced group
+        # The bad edit left the active patterns (and matching) intact.
+        self.assertEqual(pii_matcher.get_patterns(), before)
+        self.assertTrue(is_email("user@example.com"))
+
+    def test_all_or_nothing_when_one_of_several_is_invalid(self):
+        before = pii_matcher.get_patterns()
+        with self.assertRaises(ValueError):
+            # First is valid, second is not — neither must be applied.
+            pii_matcher.set_patterns({"EMAIL": r"foo", "PHONE": r"["})
+        self.assertEqual(pii_matcher.get_patterns(), before)
+        self.assertTrue(is_email("user@example.com"))
+
+    def test_unknown_type_rejected(self):
+        with self.assertRaises(ValueError):
+            pii_matcher.set_patterns({"SSN": r"\d{9}"})
+
+    def test_empty_or_non_string_rejected(self):
+        for bad in ("", "   ", None, 123):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    pii_matcher.set_patterns({"EMAIL": bad})
 
 
 if __name__ == "__main__":

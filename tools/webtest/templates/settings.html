@@ -2,38 +2,64 @@
 {% block title %}Settings{% endblock %}
 
 {% block content %}
-<!-- Screen 4 — Settings (design.md 2.4). Static placeholders only:
-     values are display defaults; editing/persistence is a later Phase 3 task. -->
+<!-- Screen 4 — Settings (design.md 2.4). Functional tuning knobs for testing,
+     not end-user settings. Values are process-local (settings_store.py); a
+     newly started job reads OCR rate + face confidence, and PII patterns are
+     applied in core.pii_matcher so matching actually changes. -->
 <h1>Settings</h1>
-<p class="lede">Tuning knobs for testing — not end-user settings. Defaults shown;
-  saving is wired in a later task.</p>
+<p class="lede">Tuning knobs for testing — not end-user settings. Changes apply to
+  the next processing run; they reset when the server restarts.</p>
 
-<section class="card">
-  <h2>OCR sampling rate</h2>
-  <label class="field">Sample every
-    <input type="number" value="1" min="1" disabled> frames
-  </label>
-</section>
+<div id="settingsRoot"
+     data-values-url="{{ url_for('settings_values') }}"
+     data-save-url="{{ url_for('save_settings') }}"
+     data-reset-url="{{ url_for('reset_settings') }}">
 
-<section class="card">
-  <h2>Face detection confidence</h2>
-  <label class="field">Threshold
-    <input type="range" min="0" max="1" step="0.05" value="0.5" disabled>
-    <span class="muted">0.50</span>
-  </label>
-</section>
+  <section class="card">
+    <h2>OCR sampling rate</h2>
+    <label class="field">Sample every
+      <input type="number" id="ocrRate" min="1" step="1"
+             value="{{ settings.ocr_sample_rate }}"> frames
+    </label>
+    <p class="muted">1 = OCR every frame (slowest, most thorough). Higher skips
+      frames between OCR samples. Must be a positive integer.</p>
+  </section>
 
-<section class="card">
-  <h2>PII regex patterns</h2>
-  <ul class="patterns">
-    <li>email</li>
-    <li>phone</li>
-    <li>credit card</li>
-    <li>IP address</li>
-  </ul>
-  <p class="muted">Editable list comes in a later task.</p>
-</section>
+  <section class="card">
+    <h2>Face detection confidence</h2>
+    <label class="field">Threshold
+      <input type="range" id="faceConf" min="0" max="1" step="0.05"
+             value="{{ settings.face_min_confidence }}">
+      <span class="muted" id="faceConfValue">{{ '%.2f'|format(settings.face_min_confidence) }}</span>
+    </label>
+    <p class="muted">Lower = blur when less certain (catches more faces, more
+      false positives). Default {{ '%.2f'|format(settings.defaults.face_min_confidence) }}.</p>
+  </section>
 
-<button class="btn primary" disabled>Save</button>
-<button class="btn" disabled>Reset to defaults</button>
+  <section class="card">
+    <h2>PII regex patterns</h2>
+    <p class="muted">Edit the pattern used to match each PII type. An invalid
+      regex is rejected and the current pattern is kept. No new categories.</p>
+    <label class="field">EMAIL
+      <input type="text" class="pattern-input" id="patternEMAIL"
+             value="{{ settings.pii_patterns.EMAIL }}">
+    </label>
+    <label class="field">PHONE
+      <input type="text" class="pattern-input" id="patternPHONE"
+             value="{{ settings.pii_patterns.PHONE }}">
+    </label>
+    <label class="field">CARD
+      <input type="text" class="pattern-input" id="patternCARD"
+             value="{{ settings.pii_patterns.CARD }}">
+    </label>
+    <label class="field">IP
+      <input type="text" class="pattern-input" id="patternIP"
+             value="{{ settings.pii_patterns.IP }}">
+    </label>
+  </section>
+
+  <button class="btn primary" id="saveSettings" type="button">Save</button>
+  <button class="btn" id="resetSettings" type="button">Reset to defaults</button>
+  <p id="settingsFeedback" class="settings-feedback" hidden></p>
+</div>
 {% endblock %}

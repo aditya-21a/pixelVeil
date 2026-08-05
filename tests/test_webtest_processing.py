@@ -57,13 +57,15 @@ class _RecordingRunner:
         self.calls = []
 
     def __call__(self, input_path, output_path, mode="blur", zones=None,
-                 ocr_sample_rate=1, progress_callback=None, preview_callback=None):
+                 ocr_sample_rate=1, face_min_confidence=None,
+                 progress_callback=None, preview_callback=None):
         self.calls.append({
             "input_path": input_path,
             "output_path": output_path,
             "mode": mode,
             "zones": zones,
             "ocr_sample_rate": ocr_sample_rate,
+            "face_min_confidence": face_min_confidence,
             "progress_callback": progress_callback,
             "preview_callback": preview_callback,
         })

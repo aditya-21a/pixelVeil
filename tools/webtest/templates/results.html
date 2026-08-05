@@ -2,31 +2,61 @@
 {% block title %}Results{% endblock %}
 
 {% block content %}
-<!-- Screen 3 — Results (design.md 2.3). Static placeholders only:
-     before/after playback, real counts, download, and issue logging are
-     wired in later Phase 3 tasks, not here. -->
+<!-- Screen 3 — Results (design.md 2.3). Before/after HTML5 <video> playback,
+     the REAL summary from process_video(), and a download button. Videos are
+     served through controlled Flask routes keyed by upload id (never arbitrary
+     filesystem paths). Reached via ?job=<uid>. States handled server-side:
+     unknown job / still running / failed / missing output all render the
+     `error` block below instead of the results.
+     Note: the design.md "Flag an issue" button was intentionally dropped for
+     this developer-only harness — manual misses are recorded directly in
+     docs/known-issues.md (see TASKS.md / DECISIONS.md D22). -->
 <h1>Results</h1>
+
+{% if error %}
+<section class="card">
+  <p class="error-msg">{{ error }}</p>
+  {% if job_url %}
+  <p><a class="btn" href="{{ job_url }}">Back to Processing</a></p>
+  {% else %}
+  <p class="muted">Start a run from the <a href="{{ url_for('upload') }}">Upload</a> screen.</p>
+  {% endif %}
+</section>
+{% else %}
 <p class="lede">Compare the original and redacted video, review what was caught,
   and download the output.</p>
 
 <section class="card">
   <h2>Before / after</h2>
   <div class="before-after">
-    <div class="placeholder-box preview">Original video</div>
-    <div class="placeholder-box preview">Redacted output</div>
+    <figure class="preview">
+      <figcaption>Original — {{ original_filename }}</figcaption>
+      <video controls preload="metadata" style="max-width: 100%;"
+             src="{{ url_for('video_original', uid=uid) }}"></video>
+    </figure>
+    <figure class="preview">
+      <figcaption>Redacted — {{ output_filename }}</figcaption>
+      <video controls preload="metadata" style="max-width: 100%;"
+             src="{{ url_for('video_processed', uid=uid) }}"></video>
+    </figure>
   </div>
-  <p class="muted">Video players load here after a run.</p>
 </section>
 
 <section class="card">
   <h2>Summary</h2>
   <ul class="summary">
-    <li>Faces blurred: <strong>—</strong></li>
-    <li>PII matches: <strong>—</strong> (emails —, phones —, cards —, IPs —)</li>
-    <li>Static zones applied: <strong>—</strong></li>
+    <li>Frames processed: <strong>{{ summary.frames_processed if summary.frames_processed is not none else '—' }}</strong></li>
+    <li>Faces blurred: <strong>{{ summary.faces_blurred if summary.faces_blurred is not none else '—' }}</strong></li>
+    {% set pii = summary.pii_by_type or {} %}
+    <li>PII matches:
+      <strong>{{ (pii.EMAIL or 0) + (pii.PHONE or 0) + (pii.CARD or 0) + (pii.IP or 0) }}</strong>
+      (emails {{ pii.EMAIL or 0 }}, phones {{ pii.PHONE or 0 }},
+       cards {{ pii.CARD or 0 }}, IPs {{ pii.IP or 0 }})</li>
+    <li>Static zones applied: <strong>{{ summary.zones_applied if summary.zones_applied is not none else '—' }}</strong></li>
   </ul>
 </section>
 
-<button class="btn primary" disabled>Download output video</button>
-<button class="btn" disabled>Flag an issue</button>
+<a class="btn primary" href="{{ url_for('download_output', uid=uid) }}" download>
+  Download output video</a>
+{% endif %}
 {% endblock %}
