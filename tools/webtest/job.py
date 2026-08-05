@@ -22,6 +22,8 @@ import threading
 import time
 import traceback
 
+import cv2
+
 from core import video_pipeline
 
 # Job lifecycle states (also used by the per-stage panel rows).
@@ -34,10 +36,80 @@ ERROR = "error"
 # the UI only ever shows a tail anyway.
 _MAX_LOG_LINES = 500
 
+# --- diagnostic preview tuning ------------------------------------------------
+# The preview is a throttled, downscaled JPEG of the frame the pipeline just
+# processed, with detection boxes overlaid. Only the LATEST image is retained
+# (never a growing buffer of frames), and it is served through a dedicated
+# endpoint — never base64'd into the ~500 ms /job poll (see server.py, D21).
+_PREVIEW_MAX_W = 480               # downscale wide frames to this width
+_PREVIEW_JPEG_QUALITY = 70         # cv2 JPEG quality for the diagnostic image
+_PREVIEW_EVERY = 6                 # regenerate at most every Nth processed frame
+
+# Overlay colors (BGR) + label per detection kind. PII shares one color; its
+# label carries the specific type (EMAIL / PHONE / CARD / IP).
+_FACE_COLOR = (0, 200, 0)          # green
+_PII_COLOR = (0, 0, 220)           # red
+_ZONE_COLOR = (255, 150, 0)        # blue/orange
+
 
 def _clock():
     """Monotonic seconds. Wrapped so tests can trace elapsed-time behavior."""
     return time.monotonic()
+
+
+def _draw_box(img, bbox, scale, color, label):
+    """Draw one scaled, labeled diagnostic rectangle onto `img` (in place).
+
+    `bbox` is (x, y, w, h) in original video pixels; `scale` maps it into the
+    downscaled preview image. Purely a preview overlay — never applied to the
+    output video (that frame was already written before this runs)."""
+    try:
+        x, y, w, h = (int(round(v * scale)) for v in bbox)
+    except (TypeError, ValueError):
+        return
+    if w <= 0 or h <= 0:
+        return
+    cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
+    # Label just above the box, or just inside the top if there's no room.
+    ty = y - 5 if y - 5 > 8 else y + 14
+    cv2.putText(img, label, (x, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1,
+                cv2.LINE_AA)
+
+
+def render_preview_jpeg(event, max_w=_PREVIEW_MAX_W):
+    """Build the diagnostic preview JPEG for one pipeline preview event.
+
+    Copies the frame (so the caller's/pipeline's frame is never mutated),
+    downscales it, overlays the face / PII / zone detection boxes carried in the
+    event, and returns JPEG bytes. Returns None if there is no usable frame.
+
+    The event is exactly what core.video_pipeline's preview_callback emits:
+    ``{"frame", "faces", "pii", "zones", ...}``.
+    """
+    frame = event.get("frame")
+    if frame is None or getattr(frame, "size", 0) == 0:
+        return None
+    # Copy before any drawing — the diagnostic overlay must never touch the
+    # array the pipeline (or output writer) is using.
+    img = frame.copy()
+    h, w = img.shape[:2]
+    scale = 1.0
+    if w > max_w:
+        scale = max_w / float(w)
+        img = cv2.resize(img, (max(1, int(w * scale)), max(1, int(h * scale))))
+
+    for bbox in event.get("faces") or []:
+        _draw_box(img, bbox, scale, _FACE_COLOR, "FACE")
+    for pii_type, bbox in event.get("pii") or []:
+        _draw_box(img, bbox, scale, _PII_COLOR, str(pii_type))
+    for bbox in event.get("zones") or []:
+        _draw_box(img, bbox, scale, _ZONE_COLOR, "ZONE")
+
+    ok, buf = cv2.imencode(".jpg", img,
+                           [int(cv2.IMWRITE_JPEG_QUALITY), _PREVIEW_JPEG_QUALITY])
+    if not ok:
+        return None
+    return buf.tobytes()
 
 
 class ProcessingJob:
@@ -53,7 +125,7 @@ class ProcessingJob:
     """
 
     def __init__(self, uid, input_path, output_path, mode, zones,
-                 ocr_sample_rate=1, runner=None):
+                 ocr_sample_rate=1, runner=None, preview_every=_PREVIEW_EVERY):
         self.uid = uid
         self.input_path = input_path
         self.output_path = output_path
@@ -63,6 +135,9 @@ class ProcessingJob:
         # Injectable for tests: defaults to the real pipeline entry point, so
         # web tests can substitute a fake and never run OCR.
         self._runner = runner or video_pipeline.process_video
+        # Regenerate the diagnostic preview at most every Nth processed frame
+        # (throttle). Injectable so tests can force/relax the cadence.
+        self._preview_every = max(1, int(preview_every))
 
         self._lock = threading.Lock()
         self._thread = None
@@ -77,6 +152,11 @@ class ProcessingJob:
         self.summary = None       # process_video()'s return value, on success
         self.error = None         # controlled error message, on failure
         self.log = []             # list of technical log line strings
+
+        # Latest diagnostic preview only — never a growing buffer of frames.
+        self._preview_jpeg = None      # bytes of the most recent preview image
+        self._preview_seq = 0          # increments each time the image updates
+        self._preview_frame_seen = 0   # processed-frame counter for throttling
 
     # -- lifecycle ------------------------------------------------------------
     def start(self):
@@ -107,6 +187,7 @@ class ProcessingJob:
                 zones=self.zones,
                 ocr_sample_rate=self.ocr_sample_rate,
                 progress_callback=self._on_progress,
+                preview_callback=self._on_preview,
             )
             with self._lock:
                 self.summary = summary
@@ -143,6 +224,33 @@ class ProcessingJob:
                 "frame %d/%s | faces this frame: %d | pii regions: %d"
                 % (frame, total or "?", event.get("faces", 0), event.get("pii", 0))
             )
+
+    def _on_preview(self, event):
+        """Pipeline preview_callback: build+store the latest diagnostic image.
+
+        Throttled to every Nth processed frame so a long video doesn't spend all
+        its time JPEG-encoding. Only the most recent JPEG is kept (the previous
+        one is replaced, never accumulated). The frame is copied inside
+        render_preview_jpeg before any drawing, so the output video is untouched.
+        """
+        self._preview_frame_seen += 1
+        n = self._preview_frame_seen
+        total = event.get("total") or 0
+        # Update on the first frame, every Nth frame, and the final frame so the
+        # preview lands promptly and ends on the last processed frame.
+        if not (n == 1 or n % self._preview_every == 0 or (total and n == total)):
+            return
+        jpeg = render_preview_jpeg(event)
+        if jpeg is None:
+            return
+        with self._lock:
+            self._preview_jpeg = jpeg
+            self._preview_seq += 1
+
+    def preview_jpeg(self):
+        """Return (jpeg_bytes, seq) for the latest preview, or (None, seq)."""
+        with self._lock:
+            return self._preview_jpeg, self._preview_seq
 
     def _append_log(self, message):
         with self._lock:
@@ -210,4 +318,8 @@ class ProcessingJob:
                 "output_ready": self.status == COMPLETE,
                 "stages": self.stages(),
                 "log": list(self.log),
+                # Lightweight preview signaling only — the image itself is served
+                # by a dedicated endpoint, never embedded in this poll (D21).
+                "has_preview": self._preview_jpeg is not None,
+                "preview_seq": self._preview_seq,
             }

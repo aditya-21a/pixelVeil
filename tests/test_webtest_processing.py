@@ -25,6 +25,8 @@ import time
 import unittest
 from unittest import mock
 
+import numpy as np
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools"))
 
@@ -45,15 +47,17 @@ class _RecordingRunner:
     """Stand-in for process_video: records its call, optionally drives the
     progress callback with canned events, can block on a gate, or raise."""
 
-    def __init__(self, events=(), summary=None, raises=None, gate=None):
+    def __init__(self, events=(), summary=None, raises=None, gate=None,
+                 preview_events=()):
         self.events = list(events)
+        self.preview_events = list(preview_events)
         self.summary = summary if summary is not None else _summary()
         self.raises = raises
         self.gate = gate
         self.calls = []
 
     def __call__(self, input_path, output_path, mode="blur", zones=None,
-                 ocr_sample_rate=1, progress_callback=None):
+                 ocr_sample_rate=1, progress_callback=None, preview_callback=None):
         self.calls.append({
             "input_path": input_path,
             "output_path": output_path,
@@ -61,6 +65,7 @@ class _RecordingRunner:
             "zones": zones,
             "ocr_sample_rate": ocr_sample_rate,
             "progress_callback": progress_callback,
+            "preview_callback": preview_callback,
         })
         if self.gate is not None:
             self.gate.wait(5)
@@ -68,6 +73,9 @@ class _RecordingRunner:
             raise self.raises
         for ev in self.events:
             progress_callback(ev)
+        for ev in self.preview_events:
+            if preview_callback is not None:
+                preview_callback(ev)
         return self.summary
 
 
@@ -301,6 +309,104 @@ class TestProcessRoutes(unittest.TestCase):
     def test_job_status_unknown_id_404(self):
         r = self.client.get("/job/does-not-exist")
         self.assertEqual(r.status_code, 404)
+
+
+class TestPreviewFeature(unittest.TestCase):
+    """Diagnostic preview generation (job.py) and endpoint (server.py). The
+    preview is a throttled, downscaled JPEG of the post-redaction frame with
+    detection boxes overlaid; never embedded in /job polling, served separately."""
+
+    def setUp(self):
+        server.app.config["TESTING"] = True
+        self.client = server.app.test_client()
+        server._STATE.clear()
+        server._ACTIVE_JOB_UID = None
+
+    def tearDown(self):
+        for st in server._STATE.values():
+            job = st.get("job")
+            if job is not None:
+                job.join(5)
+        server._STATE.clear()
+        server._ACTIVE_JOB_UID = None
+        shutil.rmtree(server.OUTPUT_DIR, ignore_errors=True)
+        shutil.rmtree(server.UPLOAD_DIR, ignore_errors=True)
+
+    def _fake_upload(self):
+        import uuid
+        uid = uuid.uuid4().hex
+        server._STATE[uid] = {
+            "video_path": os.path.join(server.UPLOAD_DIR, uid, "clip.mp4"),
+            "frame_path": os.path.join(server.UPLOAD_DIR, uid, "frame0.png"),
+            "width": 100, "height": 80,
+            "mode": "blur", "zones": [],
+        }
+        return uid
+
+    def test_preview_callback_wired_into_pipeline(self):
+        uid = self._fake_upload()
+        runner = _RecordingRunner()
+        with mock.patch("core.video_pipeline.process_video", runner):
+            self.client.post("/process", json={"id": uid})
+            server._STATE[uid]["job"].join(5)
+        self.assertTrue(callable(runner.calls[0]["preview_callback"]))
+
+    def test_preview_endpoint_404_before_first_frame(self):
+        uid = self._fake_upload()
+        gate = threading.Event()
+        runner = _RecordingRunner(gate=gate)
+        with mock.patch("core.video_pipeline.process_video", runner):
+            self.client.post("/process", json={"id": uid})
+            try:
+                # Job is running but the first preview hasn't landed yet.
+                r = self.client.get(f"/job/{uid}/preview")
+                self.assertEqual(r.status_code, 404)
+            finally:
+                gate.set()
+                server._STATE[uid]["job"].join(5)
+
+    def test_preview_endpoint_serves_jpeg_after_first_frame(self):
+        uid = self._fake_upload()
+        # Synthesize a minimal preview event: a 10x8 solid-blue frame.
+        frame = np.full((8, 10, 3), (200, 0, 0), dtype=np.uint8)
+        runner = _RecordingRunner(preview_events=[{"frame": frame}])
+        with mock.patch("core.video_pipeline.process_video", runner):
+            self.client.post("/process", json={"id": uid})
+            server._STATE[uid]["job"].join(5)
+            r = self.client.get(f"/job/{uid}/preview")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.mimetype, "image/jpeg")
+        self.assertGreater(len(r.data), 100)  # real JPEG bytes
+
+    def test_job_snapshot_reports_has_preview_and_seq(self):
+        uid = self._fake_upload()
+        frame = np.full((8, 10, 3), (0, 0, 0), dtype=np.uint8)
+        runner = _RecordingRunner(preview_events=[{"frame": frame}])
+        with mock.patch("core.video_pipeline.process_video", runner):
+            self.client.post("/process", json={"id": uid})
+            server._STATE[uid]["job"].join(5)
+            jr = self.client.get(f"/job/{uid}")
+        snap = jr.get_json()
+        self.assertTrue(snap["has_preview"])
+        self.assertIsInstance(snap["preview_seq"], int)
+        self.assertGreaterEqual(snap["preview_seq"], 1)
+
+    def test_preview_throttled_to_every_n_frames(self):
+        # Job starts with preview_every=3 (injected), so only frames 1, 3 land.
+        uid = self._fake_upload()
+        frame = np.full((6, 8, 3), (50, 50, 50), dtype=np.uint8)
+        events = [{"frame": frame, "frame_number": i, "total": 4} for i in range(1, 5)]
+        runner = _RecordingRunner(preview_events=events)
+        with mock.patch("core.video_pipeline.process_video", runner):
+            job = server.ProcessingJob(uid, "in", "out", "blur", [],
+                                        runner=runner, preview_every=3)
+            server._STATE[uid]["job"] = job
+            job.start()
+            job.join(5)
+        # seq incremented only on frames 1, 3 (4 is skipped by throttle), then
+        # frame 4 as the final => 3 updates.
+        _jpeg, seq = job.preview_jpeg()
+        self.assertEqual(seq, 3)
 
 
 if __name__ == "__main__":

@@ -520,5 +520,123 @@ class TestProcessVideoAudioMux(unittest.TestCase):
         self.assertIn("1:a:0?", captured["args"])
 
 
+class TestProcessVideoPreviewCallback(unittest.TestCase):
+    """The optional preview_callback observability hook (added for the
+    Processing screen's live diagnostic preview). Components are mocked so the
+    injected detections are known; the hook must report exactly what the
+    pipeline applied to each frame, and must never let the consumer contaminate
+    the written output.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.inp = os.path.join(self.tmp, "in.mp4")
+        self.out = os.path.join(self.tmp, "out.mp4")
+
+    def test_existing_callers_without_preview_callback_unchanged(self):
+        # Backward-compat: omitting preview_callback behaves exactly as before.
+        _write_video(self.inp, n_frames=3)
+        events = []
+        summary = video_pipeline.process_video(
+            self.inp, self.out, mode="blur", progress_callback=events.append
+        )
+        self.assertEqual(summary["frames_processed"], 3)
+        self.assertEqual(len(events), 3)
+        self.assertTrue(os.path.exists(self.out))
+
+    def test_preview_callback_receives_real_detections(self):
+        face = (10, 12, 40, 40)
+        pii_bbox = (5, 5, 100, 20)
+        previews = []
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[face],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text",
+            return_value=[("john.doe@example.com", pii_bbox)],
+        ):
+            _write_video(self.inp, n_frames=2)
+            video_pipeline.process_video(
+                self.inp, self.out, mode="blur",
+                preview_callback=previews.append,
+            )
+        # One preview event per processed frame.
+        self.assertEqual(len(previews), 2)
+        ev = previews[-1]
+        # Face bbox reported exactly as detected.
+        self.assertEqual(list(ev["faces"]), [face])
+        # PII reported as (type, bbox) — EMAIL classified from the OCR text.
+        self.assertEqual(ev["pii"], [("EMAIL", pii_bbox)])
+        # Frame image is present for rendering.
+        self.assertIsNotNone(ev["frame"])
+        self.assertEqual(ev["frame_number"], 2)
+
+    def test_preview_reports_persisted_pii_between_ocr_samples(self):
+        pii_bbox = (7, 7, 60, 18)
+        previews = []
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text",
+            return_value=[("192.168.1.5", pii_bbox)],
+        ) as detect_text:
+            _write_video(self.inp, n_frames=3)
+            # rate 2 -> OCR samples frames 0 and 2; frame 1 reuses persisted PII.
+            video_pipeline.process_video(
+                self.inp, self.out, mode="blur", ocr_sample_rate=2,
+                preview_callback=previews.append,
+            )
+        self.assertEqual(detect_text.call_count, 2)  # only sampled frames
+        # Every frame's preview — including the NON-sampled middle frame — must
+        # honestly show the IP box that was actually redacted on it.
+        self.assertEqual(len(previews), 3)
+        for ev in previews:
+            self.assertEqual(ev["pii"], [("IP", pii_bbox)])
+
+    def test_preview_reports_static_zones(self):
+        zone = (0, 0, 30, 30)
+        previews = []
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text", return_value=[],
+        ):
+            _write_video(self.inp, n_frames=2)
+            video_pipeline.process_video(
+                self.inp, self.out, mode="blur", zones=[zone],
+                preview_callback=previews.append,
+            )
+        self.assertTrue(previews)
+        self.assertEqual(list(previews[-1]["zones"]), [zone])
+
+    def test_preview_overlay_cannot_contaminate_output_video(self):
+        # A hostile consumer draws a big filled rectangle onto the preview frame.
+        # Because the hook fires AFTER the frame is written, the output must stay
+        # clean. Solid-white frames + mocked-empty detectors keep this fast and
+        # make contamination trivially detectable.
+        def vandal(event):
+            frame = event["frame"]
+            h, w = frame.shape[:2]
+            cv2.rectangle(frame, (0, 0), (w - 1, h - 1), (0, 0, 0), -1)  # fill black
+
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text", return_value=[],
+        ):
+            _write_video(self.inp, n_frames=3, w=64, h=48)  # solid white frames
+            video_pipeline.process_video(
+                self.inp, self.out, mode="blur", preview_callback=vandal,
+            )
+        # Read back the output: frames must remain (near-)white, not the black
+        # the vandal painted onto the post-write frame reference.
+        cap = cv2.VideoCapture(self.out)
+        try:
+            ok, frame = cap.read()
+            self.assertTrue(ok)
+        finally:
+            cap.release()
+        self.assertGreater(int(frame.mean()), 200)  # white ~255, black would be ~0
+
+
 if __name__ == "__main__":
     unittest.main()

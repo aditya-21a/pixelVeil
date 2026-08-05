@@ -3,10 +3,12 @@
 
 {% block content %}
 <!-- Screen 2 — Processing (design.md 2.2). Live progress bar, per-stage status
-     panel, and scrolling technical log, driven by polling /job/<uid> (see
-     static/js/app.js). The current-frame preview with detection-box overlays is
-     the NEXT Phase 3 task (it needs extra pipeline observability) and is left as
-     a static placeholder here. `data-job-id` is set by the Upload redirect. -->
+     panel, scrolling technical log, and a live current-frame preview with
+     face / PII / zone detection boxes overlaid — all driven by polling
+     /job/<uid> (state) and /job/<uid>/preview (the throttled diagnostic JPEG),
+     see static/js/app.js. Detection boxes are diagnostic overlays only; they
+     are never drawn onto the redacted output video. `data-job-id` is set by the
+     Upload redirect. -->
 <div id="processingRoot" data-job-id="{{ job_id }}">
   <h1>Processing</h1>
   <p class="lede">A live debug console for the pipeline — progress, per-stage
@@ -40,8 +42,12 @@
 
   <section class="card">
     <h2>Current frame</h2>
-    <div class="placeholder-box preview">Frame preview with face / PII / zone
-      boxes appears here during processing (next Phase 3 task).</div>
+    <div id="previewContainer">
+      <img id="previewImage" style="max-width: 100%; display: none;" alt="Current frame preview">
+      <div id="previewPlaceholder" class="placeholder-box preview">
+        Frame preview with face / PII / zone boxes appears here during processing.
+      </div>
+    </div>
   </section>
 
   <p id="processingDone" class="muted" hidden></p>

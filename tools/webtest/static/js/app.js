@@ -302,6 +302,8 @@
   var stageRows = document.getElementById("stageRows");
   var logPanel = document.getElementById("logPanel");
   var doneMsg = document.getElementById("processingDone");
+  var previewImage = document.getElementById("previewImage");
+  var previewPlaceholder = document.getElementById("previewPlaceholder");
 
   if (!jobId) {
     progressText.textContent = "No active job — start one from the Upload screen.";
@@ -310,6 +312,20 @@
 
   var POLL_MS = 500;
   var logPinnedToBottom = true;
+  var lastPreviewSeq = -1;
+
+  // Refresh the diagnostic frame image only when the job reports a NEW preview
+  // (seq changed). The image is fetched from its own endpoint — never embedded
+  // in the /job JSON — and the seq doubles as a cache-buster.
+  function updatePreview(snap) {
+    if (!previewImage || !snap.has_preview) return;
+    if (snap.preview_seq === lastPreviewSeq) return;
+    lastPreviewSeq = snap.preview_seq;
+    previewImage.src =
+      "/job/" + encodeURIComponent(jobId) + "/preview?seq=" + snap.preview_seq;
+    previewImage.style.display = "block";
+    if (previewPlaceholder) previewPlaceholder.style.display = "none";
+  }
 
   // Let the user scroll up to inspect a moment without being yanked back down.
   logPanel.addEventListener("scroll", function () {
@@ -347,6 +363,8 @@
       ? snap.log.join("\n")
       : "[--:--:--] waiting for output…";
     if (logPinnedToBottom) logPanel.scrollTop = logPanel.scrollHeight;
+
+    updatePreview(snap);
 
     if (snap.status === "complete") {
       doneMsg.hidden = false;

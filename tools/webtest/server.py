@@ -20,6 +20,7 @@ per DECISIONS.md D10/D20). The uploaded source (uploads/) and the processed
 output (outputs/) are kept in separate directories.
 """
 
+import io
 import os
 import threading
 import uuid
@@ -285,6 +286,28 @@ def job_status(uid):
     if job is None:
         return _err(404, "No processing job for this upload.")
     return jsonify(job.snapshot())
+
+
+@app.route("/job/<uid>/preview")
+def job_preview(uid):
+    """Serve the latest diagnostic preview JPEG for a job.
+
+    Kept out of the ~500 ms /job poll on purpose (D21): the browser refreshes
+    this image endpoint separately, so a full frame is never base64'd into every
+    status poll. Returns 404 before the first frame has been processed (the UI
+    degrades to its placeholder until then).
+    """
+    st = _STATE.get(uid)
+    job = st.get("job") if st else None
+    if job is None:
+        return _err(404, "No processing job for this upload.")
+    jpeg, _seq = job.preview_jpeg()
+    if jpeg is None:
+        return _err(404, "No preview available yet.")
+    resp = send_file(io.BytesIO(jpeg), mimetype="image/jpeg")
+    # Diagnostic frames change constantly; never let a proxy/browser cache them.
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/state/<uid>")

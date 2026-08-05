@@ -8,7 +8,8 @@ final output rather than OpenCV's VideoWriter alone.
 
 Public API:
     process_video(input_path, output_path, mode="blur", zones=None,
-                  ocr_sample_rate=1, progress_callback=None) -> dict
+                  ocr_sample_rate=1, progress_callback=None,
+                  preview_callback=None) -> dict
 
 This module is orchestration only: it reads frames, calls each component's
 existing public API, and writes frames back. It contains no face-detection,
@@ -110,6 +111,7 @@ def process_video(
     zones=None,
     ocr_sample_rate=1,
     progress_callback=None,
+    preview_callback=None,
 ):
     """Process `input_path` frame by frame and write the redacted result to
     `output_path`.
@@ -137,6 +139,20 @@ def process_video(
             unaffected — they run on every frame.
         progress_callback: optional callable(event: dict) invoked once per
             frame with {"frame", "total", "faces", "pii"} for the test harness.
+        preview_callback: optional callable(event: dict) invoked once per frame,
+            **after the frame has been written**, for a diagnostic live preview
+            (test harness only). The event carries the just-written, post-
+            redaction frame plus the detections actually applied to it:
+            ``{"frame", "frame_number", "total", "faces", "pii", "zones"}`` where
+            `faces` is a list of ``(x, y, w, h)`` face boxes, `pii` is a list of
+            ``(pii_type, (x, y, w, h))`` for the PII regions redacted on this
+            frame (freshly sampled *or* persisted between OCR samples — reported
+            honestly either way), and `zones` is the static-zone list. The frame
+            is passed by reference for cheap observation; consumers that draw on
+            it MUST copy first (the pipeline has already written the output, so
+            mutating the frame here cannot affect the redacted video). This is a
+            pure observation hook: it changes no detection, redaction, OCR-
+            sampling, audio-mux, or summary behavior, and defaults to a no-op.
 
     Returns:
         A summary dict: frames_processed, faces_blurred, pii_by_type (counts
@@ -272,6 +288,25 @@ def process_video(
                         "total": total_frames,
                         "faces": len(face_boxes),
                         "pii": len(persisted_pii),
+                    }
+                )
+
+            # 8. preview observation (optional diagnostic hook, after write)
+            if preview_callback is not None:
+                # Pass the frame by reference (cheap), plus the detections actually
+                # applied to it. The frame was just written, so mutating it here
+                # cannot affect the output video. The consumer MUST copy if it
+                # intends to draw on the frame.
+                preview_callback(
+                    {
+                        "frame": frame,
+                        "frame_number": summary["frames_processed"],
+                        "total": total_frames,
+                        "faces": face_boxes,  # list of (x, y, w, h)
+                        "pii": [
+                            (pii_type, bbox) for pii_type, bbox, _ in persisted_pii
+                        ],  # list of (type, (x,y,w,h)); drop the replacement string
+                        "zones": zone_manager.get_zones(),  # list of (x, y, w, h)
                     }
                 )
 
