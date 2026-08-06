@@ -17,7 +17,17 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 ## Log
 
-*(entries go here, most recent at the top)*
+## 2026-08-06 — Processing screen UI dashboard layout & per-second technical log updates
+- Changed: tools/webtest/templates/processing.html (removed header text, layout restructured to Progress card top + 2-column dashboard grid), tools/webtest/templates/base.html (`screen-wide` class for processing page container), tools/webtest/static/css/style.css (`.screen.screen-wide`, `.processing-dashboard`, `.dashboard-grid`, `.log-card`, `.processing-done-banner`), tools/webtest/job.py (`self._last_log_time` added to log frame progress at least once per second `>= 1.0s` or frame 1/total), docs/current-state.md, docs/development-log.md
+- Why: User requested removing redundant Processing header text, expanding the narrow vertical column into a full-width, no-scroll dashboard layout utilizing screen space, and streaming log progress every second instead of every 30 frames.
+- Result: Processing screen displays cleanly on a single screen without vertical scrolling; technical log streams progress line entries every second. All 85 webtest pytest suite tests pass.
+- Commit: uncommitted
+
+## 2026-08-06 — Bug fix: dual-output route path resolution when server state mode drifts
+- Changed: tools/webtest/server.py (`results()`, `_results_fake_data()`, `_results_blur()`, `video_processed()`, `download_output()`, `_serve_fake_output()`, `download_both()`), tests/test_webtest_dual_output.py (+`test_results_robust_to_ui_mode_change`), docs/current-state.md, docs/TASKS.md, docs/development-log.md
+- Why: Navigating or changing mode on the Upload screen after job completion could cause `/results` or video/download endpoints to look up paths using the wrong mode or fail to find output paths in `_STATE`.
+- Result: All Results and video/download endpoints inspect `job.mode` and fall back to `job.output_paths` / `job.output_path`. All webtest test suites pass (85 passed).
+- Commit: uncommitted
 
 ## 2026-08-06 — Phase 3 test harness: dual-output TELEA/NS comparison for fake_data mode
 - Changed: tools/webtest/job.py (`ProcessingJob.__init__` + `_run` gained `compare_methods` param + dual-pass iteration; `_run_pass` + `_check_summary_discrepancy` + `_percent_locked`; snapshot + stages + log prefix for comparison jobs), tools/webtest/server.py (`import zipfile`; `/process` branches on mode — fake_data builds `compare_methods` list + dual `output_paths`/no single `output_path`, blur unchanged; `_results_fake_data` + `_results_blur` + `_method_output_path`; `/video/<uid>/telea` + `/video/<uid>/ns` + `/download/<uid>/telea` + `/download/<uid>/ns` + `/download/<uid>/both` + `_serve_fake_output`), tools/webtest/templates/results.html (3-up before/after for fake_data, 2-up for blur; summary shown once + discrepancy note; Download TELEA/NS/Both for fake_data, single download for blur), tools/webtest/static/css/style.css (`.three-up` + `.download-row`), tools/webtest/static/js/app.js (pass indicator in progress text for comparison jobs), tests/test_webtest_processing.py (`_RecordingRunner` gained `inpaint_method` param; `test_correct_input_output_mode_zones_passed_to_process_video` switched to mode="blur" — the genuine single-run mode), tests/test_webtest_dual_output.py (new, 28 tests); docs/current-state.md, development-log.md, known-issues.md (ISSUE-007 note), DECISIONS.md (D25)

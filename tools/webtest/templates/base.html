@@ -22,7 +22,7 @@
     <span class="harness-note">local test harness</span>
   </header>
 
-  <main class="screen">
+  <main class="screen {{ 'screen-wide' if active == 'processing' }}">
     {% block content %}{% endblock %}
   </main>
 

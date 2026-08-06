@@ -199,6 +199,7 @@ class ProcessingJob:
         self.failed_method = None  # label of the pass that errored, if any
         self.error = None         # controlled error message, on failure
         self.log = []             # list of technical log line strings
+        self._last_log_time = 0.0  # timestamp of the last logged frame progress entry
 
         # Latest diagnostic preview only — never a growing buffer of frames.
         self._preview_jpeg = None      # bytes of the most recent preview image
@@ -271,6 +272,7 @@ class ProcessingJob:
             self.total = 0
             self.faces = 0
             self.pii = 0
+            self._last_log_time = 0.0
         method = p["inpaint_method"]
         if self._num_passes > 1:
             self._append_log(
@@ -341,16 +343,21 @@ class ProcessingJob:
 
     def _on_progress(self, event):
         """Pipeline progress_callback: one call per processed frame."""
+        now = _clock()
         with self._lock:
             self.frame = event.get("frame", self.frame)
             self.total = event.get("total", self.total)
             self.faces += event.get("faces", 0)
             self.pii += event.get("pii", 0)
-            self.elapsed = _clock() - self._started_at
-        # Log at a readable cadence, not every single frame, plus the first frame.
-        frame = event.get("frame", 0)
-        total = event.get("total", 0)
-        if frame == 1 or frame % 30 == 0 or (total and frame == total):
+            self.elapsed = now - self._started_at
+            should_log = False
+            frame = event.get("frame", 0)
+            total = event.get("total", 0)
+            if frame == 1 or (total and frame == total) or (now - self._last_log_time >= 1.0):
+                self._last_log_time = now
+                should_log = True
+
+        if should_log:
             # Prefix the method on a comparison job so the log makes the two
             # sequential passes legible ("telea frame 30/60", "ns frame 30/60").
             prefix = ("%s " % self._current_pass_label) if self._num_passes > 1 else ""

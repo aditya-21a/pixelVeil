@@ -524,6 +524,17 @@ class TestDualOutputRoutes(unittest.TestCase):
         self.assertEqual(snap["status"], "complete")
         self.assertEqual(snap["num_passes"], 2)
 
+    def test_results_robust_to_ui_mode_change(self):
+        # Even if the UI mode in _STATE is toggled back to "blur" after a fake_data job
+        # completes, /results and per-method routes must still resolve using job.mode.
+        uid, _runner, _ = self._complete_fake_data()
+        server._STATE[uid]["mode"] = "blur"
+        r = self.client.get("/results?job=%s" % uid)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Fake Data — TELEA", r.get_data(as_text=True))
+        self.assertEqual(self.client.get("/video/%s/telea" % uid).status_code, 200)
+        self.assertEqual(self.client.get("/download/%s/both" % uid).status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

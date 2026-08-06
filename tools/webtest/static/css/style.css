@@ -132,7 +132,49 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 .field { display: block; margin: 6px 0; }
 .field input[type="number"] { width: 72px; }
 
+.screen.screen-wide {
+  max-width: 1400px;
+  padding: 20px 24px 32px;
+}
+
 /* --- processing screen --- */
+.processing-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.processing-dashboard .card {
+  margin-bottom: 0;
+}
+
+.progress-card {
+  padding: 16px 20px;
+}
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.progress-header h2 {
+  margin: 0;
+}
+
+.processing-done-banner:not([hidden]) {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #15803D;
+}
+.processing-done-banner.error-msg:not([hidden]) {
+  color: #B91C1C;
+}
+
 .progress {
   height: 10px;
   background: var(--border);
@@ -142,13 +184,41 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 }
 .progress-fill { height: 100%; background: var(--accent); }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stages-card, .preview-card {
+  padding: 16px 20px;
+}
 .stages { width: 100%; border-collapse: collapse; font-size: 13px; }
-.stages th, .stages td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.stages th, .stages td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
 .stages th { color: var(--muted); font-weight: 600; }
 .state.idle, .state.pending { color: var(--muted); }
 .state.running { color: var(--accent); font-weight: 600; }
 .state.complete { color: #15803D; font-weight: 600; }
 .state.error { color: #B91C1C; font-weight: 600; }
+
+.log-card {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
 .log {
   font-family: Consolas, "Courier New", monospace;  /* design.md 2.2: mono log only */
@@ -158,7 +228,9 @@ h2 { font-size: 15px; margin: 0 0 12px; }
   padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
-  max-height: 260px;
+  flex: 1;
+  min-height: 380px;
+  max-height: calc(100vh - 250px);
   overflow-y: auto;
   white-space: pre-wrap;
   margin: 0;

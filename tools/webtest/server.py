@@ -184,7 +184,8 @@ def results():
 
     # From here the job completed successfully. blur and fake_data differ in how
     # many outputs exist and how they're presented, so branch on mode.
-    if st.get("mode") == "fake_data":
+    job_mode = getattr(job, "mode", st.get("mode"))
+    if job_mode == "fake_data":
         return _results_fake_data(uid, st, job)
     return _results_blur(uid, st, job)
 
@@ -193,7 +194,8 @@ def _results_blur(uid, st, job):
     """Render Results for a completed single-output (blur) job."""
     # Guard: job completed but output file missing (unlikely — ProcessingJob
     # writes it before marking complete, but filesystem issues could delete it)
-    if not os.path.exists(st.get("output_path", "")):
+    output_path = st.get("output_path") or getattr(job, "output_path", None)
+    if not output_path or not os.path.exists(output_path):
         return render_template("results.html", active="results",
                                error="Output video file is missing (deleted or moved).")
 
@@ -202,7 +204,7 @@ def _results_blur(uid, st, job):
                            mode="blur",
                            uid=uid,
                            original_filename=os.path.basename(st["video_path"]),
-                           output_filename=os.path.basename(st["output_path"]),
+                           output_filename=os.path.basename(output_path),
                            summary=summary)
 
 
@@ -215,7 +217,7 @@ def _results_fake_data(uid, st, job):
     would be misleading; any unexpected per-method count difference is surfaced
     via `summary_discrepancy` rather than hidden.
     """
-    output_paths = st.get("output_paths") or {}
+    output_paths = st.get("output_paths") or getattr(job, "output_paths", {}) or {}
     # Guard: a completed comparison must have both method outputs on disk.
     missing = [m for m in COMPARE_METHODS
                if not os.path.exists(output_paths.get(m, ""))]
@@ -230,8 +232,8 @@ def _results_fake_data(uid, st, job):
         mode="fake_data",
         uid=uid,
         original_filename=os.path.basename(st["video_path"]),
-        telea_filename=os.path.basename(output_paths["telea"]),
-        ns_filename=os.path.basename(output_paths["ns"]),
+        telea_filename=os.path.basename(output_paths.get("telea", "")),
+        ns_filename=os.path.basename(output_paths.get("ns", "")),
         summary=job.summary or {},
         summary_discrepancy=job.summary_discrepancy)
 
@@ -548,7 +550,7 @@ def video_processed(uid):
     """Serve the processed/redacted output video for before/after playback.
 
     Requires a completed job with an existing output file. The path is taken
-    from server-controlled _STATE, not from the client.
+    from server-controlled _STATE or job, not from the client.
     """
     st = _STATE.get(uid)
     job = st.get("job") if st else None
@@ -556,7 +558,7 @@ def video_processed(uid):
         return _err(404, "No processing job for this upload.")
     if job.status != "complete":
         return _err(409, "Processed video is not ready yet.")
-    path = st.get("output_path")
+    path = st.get("output_path") or getattr(job, "output_path", None)
     if not path or not os.path.exists(path):
         return _err(404, "Processed video file is missing.")
     return send_file(path, mimetype="video/mp4", conditional=True)
@@ -566,8 +568,8 @@ def video_processed(uid):
 def download_output(uid):
     """Download the final processed video, preserving its actual filename.
 
-    Serves the existing completed output file from server-controlled _STATE
-    (never a client path) as an attachment with the real output filename.
+    Serves the existing completed output file from server-controlled _STATE or
+    job (never a client path) as an attachment with the real output filename.
     """
     st = _STATE.get(uid)
     job = st.get("job") if st else None
@@ -575,7 +577,7 @@ def download_output(uid):
         return _err(404, "No processing job for this upload.")
     if job.status != "complete":
         return _err(409, "Output is not ready to download yet.")
-    path = st.get("output_path")
+    path = st.get("output_path") or getattr(job, "output_path", None)
     if not path or not os.path.exists(path):
         return _err(404, "Output video file is missing.")
     return send_file(path, mimetype="video/mp4", as_attachment=True,
@@ -599,9 +601,9 @@ def _serve_fake_output(uid, method, as_attachment):
         return _err(404, "Unknown comparison method.")
     if job.status != "complete":
         return _err(409, "Processed video is not ready yet.")
-    # output_paths is only set for fake_data comparison jobs — a blur job (single
-    # output_path) has no per-method files, so these routes 404 for it.
-    output_paths = st.get("output_paths") or {}
+    if getattr(job, "mode", st.get("mode")) != "fake_data":
+        return _err(404, "Job was not run in comparison mode.")
+    output_paths = st.get("output_paths") or getattr(job, "output_paths", {}) or {}
     path = output_paths.get(method)
     if not path or not os.path.exists(path):
         return _err(404, "Processed video file is missing for method %r." % method)
@@ -650,7 +652,9 @@ def download_both(uid):
         return _err(404, "No processing job for this upload.")
     if job.status != "complete":
         return _err(409, "Output is not ready to download yet.")
-    output_paths = st.get("output_paths") or {}
+    if getattr(job, "mode", st.get("mode")) != "fake_data":
+        return _err(404, "Job was not run in comparison mode.")
+    output_paths = st.get("output_paths") or getattr(job, "output_paths", {}) or {}
     paths = [output_paths.get(m) for m in COMPARE_METHODS]
     if any(not p or not os.path.exists(p) for p in paths):
         return _err(404, "One or both output video files are missing.")
