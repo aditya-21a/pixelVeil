@@ -14,6 +14,7 @@ No large video fixtures — inputs are generated at test time.
 """
 
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -188,8 +189,14 @@ class TestProcessVideoOrchestration(unittest.TestCase):
             video_pipeline.redactor, "fake_data_region",
         ) as fake:
             video_pipeline.process_video(self.inp, self.out, mode="fake_data")
-        # EMAIL classified -> generate("EMAIL") -> fake_data_region(text=...).
-        gen.assert_called_with("EMAIL")
+        # EMAIL classified -> generate("EMAIL", original=...) -> fake_data_region(text=...).
+        # OCR runs every frame at rate 1 (2 frames), so generate is called per frame;
+        # verify each call carries the PII type and the original value.
+        for call_args in gen.call_args_list:
+            self.assertEqual(call_args[0][0], "EMAIL")  # first positional arg is pii_type
+            self.assertEqual(
+                call_args[1].get("original"), "john.doe@example.com"
+            )  # original kwarg
         self.assertEqual(fake.call_count, 2)  # once per frame
         # The generated string is what gets passed to the renderer.
         _args, kwargs = fake.call_args
@@ -351,7 +358,11 @@ class TestProcessVideoOcrSampling(unittest.TestCase):
             video_pipeline.redactor, "fake_data_region",
         ) as fake:
             summary = self._run(3, mode="fake_data", ocr_sample_rate=3)
-        gen.assert_called_once_with("EMAIL")          # generated once
+        gen.assert_called_once()  # generated once
+        # Check it was called with EMAIL and the original value
+        call_args = gen.call_args
+        self.assertEqual(call_args[0][0], "EMAIL")
+        self.assertEqual(call_args[1].get("original"), "john.doe@example.com")
         self.assertEqual(fake.call_count, 3)          # drawn every frame
         for call in fake.call_args_list:              # same persisted string
             self.assertEqual(call.args[1], bbox)
@@ -876,6 +887,72 @@ class TestValueOnlyRedaction(unittest.TestCase):
         self.assertEqual(len(boxes), 1)               # same tightened bbox reused
         vb = next(iter(boxes))
         self.assertGreater(vb[0], ocr_bbox[0])        # persisted box is tightened
+
+
+class TestFakeDataStylePersistence(unittest.TestCase):
+    """Fake-data mode: the estimated source style is computed once per OCR
+    sample and persisted between samples (no per-frame recompute -> no color/
+    size flicker). Guards against re-estimating style on non-sampled frames or
+    sharing mutable style state incorrectly."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.inp = os.path.join(self.tmp, "in.mp4")
+        self.out = os.path.join(self.tmp, "out.mp4")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_style_estimated_once_and_persisted_between_samples(self):
+        _write_video(self.inp, n_frames=4)
+        bbox = (5, 5, 100, 20)
+        sentinel_style = {
+            "text_color": (50, 200, 50), "bg_color": (20, 20, 20),
+            "text_height": 12, "baseline_offset": 3, "width": 100,
+        }
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text",
+            return_value=[("john.doe@example.com", bbox)],
+        ), mock.patch.object(
+            video_pipeline.redactor, "estimate_text_style",
+            return_value=sentinel_style,
+        ) as est, mock.patch.object(
+            video_pipeline.fake_data, "generate", return_value="a.b@example.com",
+        ), mock.patch.object(
+            video_pipeline.redactor, "fake_data_region",
+        ) as fake:
+            video_pipeline.process_video(
+                self.inp, self.out, mode="fake_data", ocr_sample_rate=4,
+            )
+        # Estimated on the single sampled frame only, not every frame.
+        est.assert_called_once()
+        # Drawn on all 4 frames, each time with the SAME persisted style.
+        self.assertEqual(fake.call_count, 4)
+        for call in fake.call_args_list:
+            self.assertEqual(call.kwargs.get("style"), sentinel_style)
+
+    def test_inpaint_method_forwarded_to_fake_data_region(self):
+        _write_video(self.inp, n_frames=2)
+        bbox = (5, 5, 100, 20)
+        with mock.patch.object(
+            video_pipeline.face_detector, "detect_faces", return_value=[],
+        ), mock.patch.object(
+            video_pipeline.ocr_detector, "detect_text",
+            return_value=[("john.doe@example.com", bbox)],
+        ), mock.patch.object(
+            video_pipeline.redactor, "estimate_text_style", return_value=None,
+        ), mock.patch.object(
+            video_pipeline.fake_data, "generate", return_value="a.b@example.com",
+        ), mock.patch.object(
+            video_pipeline.redactor, "fake_data_region",
+        ) as fake:
+            video_pipeline.process_video(
+                self.inp, self.out, mode="fake_data", inpaint_method="ns",
+            )
+        for call in fake.call_args_list:
+            self.assertEqual(call.kwargs.get("inpaint_method"), "ns")
 
 
 if __name__ == "__main__":

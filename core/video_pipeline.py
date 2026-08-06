@@ -147,6 +147,7 @@ def process_video(
     face_min_confidence=None,
     progress_callback=None,
     preview_callback=None,
+    inpaint_method="telea",
 ):
     """Process `input_path` frame by frame and write the redacted result to
     `output_path`.
@@ -196,6 +197,10 @@ def process_video(
             mutating the frame here cannot affect the redacted video). This is a
             pure observation hook: it changes no detection, redaction, OCR-
             sampling, audio-mux, or summary behavior, and defaults to a no-op.
+        inpaint_method: optional inpainting method for fake_data mode, forwarded
+            to redactor.fake_data_region(). "telea" (default) or "ns"
+            (Navier-Stokes). Both are classical lightweight OpenCV algorithms.
+            Invalid method names raise ValueError. Ignored when mode is "blur".
 
     Returns:
         A summary dict: frames_processed, faces_blurred, pii_by_type (counts
@@ -267,11 +272,13 @@ def process_video(
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 
         # PII regions carried over from the most recent OCR sample. Each entry
-        # is (pii_type, bbox, replacement) where replacement is the pre-
-        # generated fake-data string (fake_data mode) or None (blur mode).
-        # Persisting the generated string — not just the bbox — keeps the
-        # synthetic value stable between samples instead of flickering every
-        # frame (architecture.md 6.5/7).
+        # is (pii_type, bbox, replacement, style) where replacement is the pre-
+        # generated fake-data string (fake_data mode) or None (blur mode), and
+        # style is the estimated text appearance dict from estimate_text_style()
+        # (fake_data mode) or None (blur mode). Persisting both the generated
+        # string and the style — not just the bbox — keeps the synthetic value
+        # stable and visually consistent between samples instead of flickering
+        # every frame (architecture.md 6.5/7).
         persisted_pii = []
         frame_index = 0
 
@@ -314,15 +321,20 @@ def process_video(
                     # region. A value-only box yields the full bbox unchanged.
                     for pii_type, start, end, _value in pii_matcher.find_pii(text):
                         value_bbox = _span_to_bbox(bbox, text, start, end)
-                        # Generate the fake-data replacement once, at sample
-                        # time, so it stays fixed until the next sample (no
-                        # flicker), per value.
-                        replacement = (
-                            fake_data.generate(pii_type)
-                            if mode == "fake_data"
-                            else None
-                        )
-                        persisted_pii.append((pii_type, value_bbox, replacement))
+
+                        # For fake-data mode, estimate the source style BEFORE
+                        # any pixels are modified, then generate the replacement
+                        # value (passing the original to match formatting).
+                        # Both style and replacement are persisted between samples
+                        # so the output is stable and doesn't flicker.
+                        if mode == "fake_data":
+                            style = redactor.estimate_text_style(frame, value_bbox)
+                            replacement = fake_data.generate(pii_type, original=_value)
+                        else:
+                            style = None
+                            replacement = None
+
+                        persisted_pii.append((pii_type, value_bbox, replacement, style))
 
             # 4. redact faces — always blurred, regardless of mode
             for fbox in face_boxes:
@@ -330,11 +342,14 @@ def process_video(
             summary["faces_blurred"] += len(face_boxes)
 
             # 5. redact matched PII (fresh or persisted), per mode
-            for pii_type, bbox, replacement in persisted_pii:
+            for pii_type, bbox, replacement, style in persisted_pii:
                 if mode == "blur":
                     redactor.blur_region(frame, bbox)
-                else:  # fake_data — reuse the persisted replacement string
-                    redactor.fake_data_region(frame, bbox, replacement)
+                else:  # fake_data — reuse the persisted replacement + style
+                    redactor.fake_data_region(
+                        frame, bbox, replacement,
+                        inpaint_method=inpaint_method, style=style,
+                    )
                 summary["pii_by_type"][pii_type] += 1
 
             # 6. static zones — every frame, via ZoneManager
@@ -369,8 +384,9 @@ def process_video(
                         "total": total_frames,
                         "faces": face_boxes,  # list of (x, y, w, h)
                         "pii": [
-                            (pii_type, bbox) for pii_type, bbox, _ in persisted_pii
-                        ],  # list of (type, (x,y,w,h)); drop the replacement string
+                            (pii_type, bbox)
+                            for pii_type, bbox, _, _ in persisted_pii
+                        ],  # list of (type, (x,y,w,h)); drop replacement + style
                         "zones": zone_manager.get_zones(),  # list of (x, y, w, h)
                     }
                 )
