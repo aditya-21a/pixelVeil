@@ -58,7 +58,8 @@ class _RecordingRunner:
 
     def __call__(self, input_path, output_path, mode="blur", zones=None,
                  ocr_sample_rate=1, face_min_confidence=None,
-                 progress_callback=None, preview_callback=None):
+                 progress_callback=None, preview_callback=None,
+                 inpaint_method=None):
         self.calls.append({
             "input_path": input_path,
             "output_path": output_path,
@@ -68,6 +69,7 @@ class _RecordingRunner:
             "face_min_confidence": face_min_confidence,
             "progress_callback": progress_callback,
             "preview_callback": preview_callback,
+            "inpaint_method": inpaint_method,
         })
         if self.gate is not None:
             self.gate.wait(5)
@@ -210,7 +212,12 @@ class TestProcessRoutes(unittest.TestCase):
         self.assertIn("/job/", body["poll_url"])
 
     def test_correct_input_output_mode_zones_passed_to_process_video(self):
-        uid = self._fake_upload(mode="fake_data", zones=[[10, 20, 30, 40]])
+        # blur is the single-run mode, so it exercises the one-forward contract:
+        # exactly one process_video() call with the right input/output/mode/
+        # zones/ocr_sample_rate. (fake_data now runs TWICE for the TELEA/NS
+        # comparison — that dual-forward behavior is covered in
+        # tests/test_webtest_dual_output.py, not here.)
+        uid = self._fake_upload(mode="blur", zones=[[10, 20, 30, 40]])
         runner = _RecordingRunner()
         with mock.patch("core.video_pipeline.process_video", runner):
             self.client.post("/process", json={"id": uid})
@@ -222,7 +229,7 @@ class TestProcessRoutes(unittest.TestCase):
         self.assertEqual(call["input_path"], server._STATE[uid]["video_path"])
         self.assertTrue(call["output_path"].startswith(server.OUTPUT_DIR))
         self.assertNotEqual(call["input_path"], call["output_path"])
-        self.assertEqual(call["mode"], "fake_data")
+        self.assertEqual(call["mode"], "blur")
         # zones passed as (x,y,w,h) tuples — ZoneManager's expected form
         self.assertEqual(call["zones"], [(10, 20, 30, 40)])
         self.assertEqual(call["ocr_sample_rate"], 1)

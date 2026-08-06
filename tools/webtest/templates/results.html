@@ -23,11 +23,39 @@
   {% endif %}
 </section>
 {% else %}
+{% if mode == 'fake_data' %}
+<p class="lede">Compare the original against both inpainting methods (TELEA and
+  Navier-Stokes), review what was caught, and download either or both outputs.</p>
+{% else %}
 <p class="lede">Compare the original and redacted video, review what was caught,
   and download the output.</p>
+{% endif %}
 
 <section class="card">
   <h2>Before / after</h2>
+  {% if mode == 'fake_data' %}
+  <!-- fake_data is processed twice for a manual TELEA-vs-Navier-Stokes inpaint
+       comparison (a temporary QA aid — no winner is chosen). Three players:
+       the original plus one output per method, each from its own controlled,
+       id-keyed route. -->
+  <div class="before-after three-up">
+    <figure class="preview">
+      <figcaption>Original — {{ original_filename }}</figcaption>
+      <video controls preload="metadata" style="max-width: 100%;"
+             src="{{ url_for('video_original', uid=uid) }}"></video>
+    </figure>
+    <figure class="preview">
+      <figcaption>Fake Data — TELEA — {{ telea_filename }}</figcaption>
+      <video controls preload="metadata" style="max-width: 100%;"
+             src="{{ url_for('video_telea', uid=uid) }}"></video>
+    </figure>
+    <figure class="preview">
+      <figcaption>Fake Data — Navier-Stokes — {{ ns_filename }}</figcaption>
+      <video controls preload="metadata" style="max-width: 100%;"
+             src="{{ url_for('video_ns', uid=uid) }}"></video>
+    </figure>
+  </div>
+  {% else %}
   <div class="before-after">
     <figure class="preview">
       <figcaption>Original — {{ original_filename }}</figcaption>
@@ -40,10 +68,18 @@
              src="{{ url_for('video_processed', uid=uid) }}"></video>
     </figure>
   </div>
+  {% endif %}
 </section>
 
 <section class="card">
   <h2>Summary</h2>
+  {% if mode == 'fake_data' %}
+  <p class="muted">The same input was processed twice (TELEA and Navier-Stokes);
+    detection is identical across both, so the counts below are shown once.</p>
+  {% if summary_discrepancy %}
+  <p class="error-msg">{{ summary_discrepancy }}</p>
+  {% endif %}
+  {% endif %}
   <ul class="summary">
     <li>Frames processed: <strong>{{ summary.frames_processed if summary.frames_processed is not none else '—' }}</strong></li>
     <li>Faces blurred: <strong>{{ summary.faces_blurred if summary.faces_blurred is not none else '—' }}</strong></li>
@@ -56,7 +92,18 @@
   </ul>
 </section>
 
+{% if mode == 'fake_data' %}
+<div class="download-row">
+  <a class="btn primary" href="{{ url_for('download_telea', uid=uid) }}" download>
+    Download TELEA</a>
+  <a class="btn primary" href="{{ url_for('download_ns', uid=uid) }}" download>
+    Download NS</a>
+  <a class="btn" href="{{ url_for('download_both', uid=uid) }}" download>
+    Download Both (ZIP)</a>
+</div>
+{% else %}
 <a class="btn primary" href="{{ url_for('download_output', uid=uid) }}" download>
   Download output video</a>
+{% endif %}
 {% endif %}
 {% endblock %}

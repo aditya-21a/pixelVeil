@@ -353,9 +353,18 @@
 
   function render(snap) {
     progressFill.style.width = snap.percent + "%";
+    // For a fake_data TELEA/NS comparison the job runs two sequential passes;
+    // show which method (pass N/M) is currently processing so the two runs are
+    // legible on one progress bar. A normal single-pass job shows no suffix.
+    var passInfo = "";
+    if (snap.num_passes && snap.num_passes > 1 && snap.status === "running") {
+      passInfo = " · " + (snap.pass_label || "").toUpperCase() +
+        " (pass " + ((snap.pass_index || 0) + 1) + "/" + snap.num_passes + ")";
+    }
     progressText.textContent =
       "Frame " + snap.frame + " of " + (snap.total || "?") +
-      " · " + snap.percent + "% · elapsed " + snap.elapsed + "s · " + snap.status;
+      " · " + snap.percent + "% · elapsed " + snap.elapsed + "s · " + snap.status +
+      passInfo;
 
     renderStages(snap.stages);
 

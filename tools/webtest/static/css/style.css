@@ -120,6 +120,12 @@ h2 { font-size: 15px; margin: 0 0 12px; }
 .before-after .placeholder-box { flex: 1; }
 .before-after figure.preview { flex: 1; min-width: 280px; margin: 0; }
 .before-after figure.preview figcaption { font-size: 13px; color: #666; margin-bottom: 6px; }
+/* fake_data comparison shows three players (Original / TELEA / NS); allow a
+   narrower min-width so they fit side by side on a normal window before wrapping. */
+.before-after.three-up figure.preview { min-width: 220px; }
+
+/* Row of download actions for the fake_data comparison (TELEA / NS / both). */
+.download-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 
 /* --- form controls --- */
 .radio { display: block; margin: 6px 0; }

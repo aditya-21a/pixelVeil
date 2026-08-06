@@ -24,6 +24,7 @@ import io
 import os
 import threading
 import uuid
+import zipfile
 
 import cv2
 from flask import (
@@ -51,8 +52,18 @@ OUTPUT_DIR = os.path.join(app.root_path, "outputs")    # processed output videos
 
 VALID_MODES = ("blur", "fake_data")
 
+# fake_data is processed twice for a manual TELEA-vs-Navier-Stokes inpainting
+# comparison (a temporary QA capability — no winner is chosen here). Each method
+# gets its own output file so neither overwrites the other. Order is the order
+# the passes run (TELEA fills the first half of the progress bar, NS the second).
+COMPARE_METHODS = ("telea", "ns")
+COMPARE_LABELS = {"telea": "Fake Data — TELEA", "ns": "Fake Data — Navier-Stokes"}
+
 # upload id -> {"video_path", "frame_path", "width", "height", "mode", "zones",
-#               and (once processing starts) "job", "output_path"}
+#               and (once processing starts) "job", plus output paths}
+# For a blur job the output lives at "output_path" (single redacted file). For a
+# fake_data job the harness runs the pipeline twice to compare inpainting methods
+# and stores "output_paths" = {"telea": ..., "ns": ...} instead (see /process).
 # Process-local; see module docstring. Not thread-safe by design for the upload
 # fields (local, single user, Flask dev server); the background job manages its
 # own locking for the fields the worker thread mutates.
@@ -66,6 +77,18 @@ _ACTIVE_JOB_UID = None
 # --- helpers -----------------------------------------------------------------
 def _err(code, message):
     return jsonify({"error": message}), code
+
+
+def _method_output_path(out_dir, video_path, method):
+    """Build a method-specific output path, e.g. test.mp4 -> test_telea.mp4.
+
+    Keeps each inpainting method's output distinct within the per-upload output
+    directory so a comparison job never overwrites one method's result with the
+    other's. `method` is one of COMPARE_METHODS (a fixed server-side allowlist),
+    never client input, so the suffix is always a safe token.
+    """
+    stem, ext = os.path.splitext(os.path.basename(video_path))
+    return os.path.join(out_dir, "%s_%s%s" % (stem, method, ext))
 
 
 def _public_state(uid, st):
@@ -159,19 +182,58 @@ def results():
                                error=f"Processing failed: {job.error or 'unknown error'}",
                                job_url=url_for("processing", job=uid))
 
+    # From here the job completed successfully. blur and fake_data differ in how
+    # many outputs exist and how they're presented, so branch on mode.
+    if st.get("mode") == "fake_data":
+        return _results_fake_data(uid, st, job)
+    return _results_blur(uid, st, job)
+
+
+def _results_blur(uid, st, job):
+    """Render Results for a completed single-output (blur) job."""
     # Guard: job completed but output file missing (unlikely — ProcessingJob
     # writes it before marking complete, but filesystem issues could delete it)
     if not os.path.exists(st.get("output_path", "")):
         return render_template("results.html", active="results",
                                error="Output video file is missing (deleted or moved).")
 
-    # Happy path: job completed successfully and output exists
     summary = job.summary or {}
     return render_template("results.html", active="results",
+                           mode="blur",
                            uid=uid,
                            original_filename=os.path.basename(st["video_path"]),
                            output_filename=os.path.basename(st["output_path"]),
                            summary=summary)
+
+
+def _results_fake_data(uid, st, job):
+    """Render Results for a completed fake_data TELEA-vs-NS comparison job.
+
+    Shows three players (Original + one per inpainting method) and downloads for
+    each method (plus a combined ZIP). The detection summary is shown ONCE — the
+    same input was processed twice with identical detection, so counting it twice
+    would be misleading; any unexpected per-method count difference is surfaced
+    via `summary_discrepancy` rather than hidden.
+    """
+    output_paths = st.get("output_paths") or {}
+    # Guard: a completed comparison must have both method outputs on disk.
+    missing = [m for m in COMPARE_METHODS
+               if not os.path.exists(output_paths.get(m, ""))]
+    if missing:
+        return render_template(
+            "results.html", active="results",
+            error="Output video file is missing for: %s (deleted or moved)."
+                  % ", ".join(missing))
+
+    return render_template(
+        "results.html", active="results",
+        mode="fake_data",
+        uid=uid,
+        original_filename=os.path.basename(st["video_path"]),
+        telea_filename=os.path.basename(output_paths["telea"]),
+        ns_filename=os.path.basename(output_paths["ns"]),
+        summary=job.summary or {},
+        summary_discrepancy=job.summary_discrepancy)
 
 
 @app.route("/settings")
@@ -370,7 +432,6 @@ def process():
 
         out_dir = os.path.join(OUTPUT_DIR, uid)
         os.makedirs(out_dir, exist_ok=True)
-        output_path = os.path.join(out_dir, "redacted_" + os.path.basename(st["video_path"]))
 
         # Zones are stored as [x, y, w, h] lists; pass them as tuples — exactly
         # the (x, y, w, h) form ZoneManager.add_zone() (inside process_video)
@@ -379,17 +440,50 @@ def process():
         # read at start time so a job always uses the latest saved tuning; the
         # PII patterns are applied globally in core.pii_matcher by the store.
         proc_kwargs = settings_store.processing_kwargs()
-        job = ProcessingJob(
-            uid,
-            st["video_path"],
-            output_path,
-            st["mode"],
-            [tuple(z) for z in st["zones"]],
+        job_kwargs = dict(
             ocr_sample_rate=proc_kwargs["ocr_sample_rate"],
             face_min_confidence=proc_kwargs["face_min_confidence"],
         )
+
+        if st["mode"] == "fake_data":
+            # Compare TELEA vs Navier-Stokes on the SAME input: two sequential
+            # pipeline passes, one output file each (never overwriting the
+            # other). Blur is unaffected and still runs once. This is a manual
+            # comparison aid — the pipeline/redaction logic is untouched; only
+            # the inpaint_method differs between passes (see job.ProcessingJob).
+            output_paths = {
+                m: _method_output_path(out_dir, st["video_path"], m)
+                for m in COMPARE_METHODS
+            }
+            compare_methods = [
+                (m, m, output_paths[m]) for m in COMPARE_METHODS
+            ]
+            job = ProcessingJob(
+                uid,
+                st["video_path"],
+                None,                       # no single output; see compare_methods
+                st["mode"],
+                [tuple(z) for z in st["zones"]],
+                compare_methods=compare_methods,
+                **job_kwargs,
+            )
+            st["output_paths"] = output_paths
+            st.pop("output_path", None)     # not a single-output job
+        else:
+            output_path = os.path.join(
+                out_dir, "redacted_" + os.path.basename(st["video_path"]))
+            job = ProcessingJob(
+                uid,
+                st["video_path"],
+                output_path,
+                st["mode"],
+                [tuple(z) for z in st["zones"]],
+                **job_kwargs,
+            )
+            st["output_path"] = output_path
+            st.pop("output_paths", None)    # not a comparison job
+
         st["job"] = job
-        st["output_path"] = output_path
         _ACTIVE_JOB_UID = uid
         job.start()
 
@@ -486,6 +580,91 @@ def download_output(uid):
         return _err(404, "Output video file is missing.")
     return send_file(path, mimetype="video/mp4", as_attachment=True,
                      download_name=os.path.basename(path))
+
+
+def _serve_fake_output(uid, method, as_attachment):
+    """Serve one method's fake_data output (TELEA or NS) from server state.
+
+    Shared by the per-method video and download routes. Enforces the same
+    controlled-access rules as the blur routes: the path comes only from
+    server-owned `output_paths` (never client input), the job must be a completed
+    fake_data comparison, `method` must be a known method, and the file must
+    exist. Returns a Flask response, or an (_err) tuple on any failure.
+    """
+    st = _STATE.get(uid)
+    job = st.get("job") if st else None
+    if job is None:
+        return _err(404, "No processing job for this upload.")
+    if method not in COMPARE_METHODS:
+        return _err(404, "Unknown comparison method.")
+    if job.status != "complete":
+        return _err(409, "Processed video is not ready yet.")
+    # output_paths is only set for fake_data comparison jobs — a blur job (single
+    # output_path) has no per-method files, so these routes 404 for it.
+    output_paths = st.get("output_paths") or {}
+    path = output_paths.get(method)
+    if not path or not os.path.exists(path):
+        return _err(404, "Processed video file is missing for method %r." % method)
+    return send_file(path, mimetype="video/mp4", conditional=True,
+                     as_attachment=as_attachment,
+                     download_name=os.path.basename(path))
+
+
+@app.route("/video/<uid>/telea")
+def video_telea(uid):
+    """Serve the TELEA-inpainted fake_data output for before/after playback."""
+    return _serve_fake_output(uid, "telea", as_attachment=False)
+
+
+@app.route("/video/<uid>/ns")
+def video_ns(uid):
+    """Serve the Navier-Stokes-inpainted fake_data output for playback."""
+    return _serve_fake_output(uid, "ns", as_attachment=False)
+
+
+@app.route("/download/<uid>/telea")
+def download_telea(uid):
+    """Download the TELEA fake_data output, preserving its _telea filename."""
+    return _serve_fake_output(uid, "telea", as_attachment=True)
+
+
+@app.route("/download/<uid>/ns")
+def download_ns(uid):
+    """Download the Navier-Stokes fake_data output, preserving its _ns filename."""
+    return _serve_fake_output(uid, "ns", as_attachment=True)
+
+
+@app.route("/download/<uid>/both")
+def download_both(uid):
+    """Download both fake_data outputs as a single ZIP (stdlib zipfile).
+
+    Contains exactly the two processed MP4s under their method-specific
+    filenames — nothing else. Built in-memory (no temp file, no new dependency).
+    Same controlled-access rules as the per-method routes: paths come only from
+    server-owned `output_paths`, the job must be a completed fake_data
+    comparison, and both files must exist.
+    """
+    st = _STATE.get(uid)
+    job = st.get("job") if st else None
+    if job is None:
+        return _err(404, "No processing job for this upload.")
+    if job.status != "complete":
+        return _err(409, "Output is not ready to download yet.")
+    output_paths = st.get("output_paths") or {}
+    paths = [output_paths.get(m) for m in COMPARE_METHODS]
+    if any(not p or not os.path.exists(p) for p in paths):
+        return _err(404, "One or both output video files are missing.")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in paths:
+            # arcname = basename only, so the ZIP holds two clearly-named files
+            # (…_telea.mp4 / …_ns.mp4) and leaks no server directory structure.
+            zf.write(path, arcname=os.path.basename(path))
+    buf.seek(0)
+    stem, _ext = os.path.splitext(os.path.basename(st["video_path"]))
+    return send_file(buf, mimetype="application/zip", as_attachment=True,
+                     download_name="%s_telea_ns.zip" % stem)
 
 
 @app.route("/state/<uid>")

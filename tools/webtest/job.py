@@ -14,6 +14,19 @@ and the technical log. This module deliberately observes only what that callback
 and the returned summary actually expose — it does not fabricate per-stage
 internals the pipeline cannot report (see ProcessingJob.stages).
 
+Most jobs run process_video() exactly once. A fake_data *comparison* job (the
+harness feature that lets the developer eyeball TELEA vs Navier-Stokes inpainting
+on the same input) instead runs it twice, sequentially — once with
+`inpaint_method="telea"` and once with `"ns"` — writing a separate output per
+method. This is driven purely by the `compare_methods` the harness passes in; the
+core pipeline is untouched. The two passes are presented to the UI as ONE job:
+overall progress spans both (TELEA fills the first half, NS the second), the job
+only reaches COMPLETE after BOTH succeed, and if either pass fails the whole job
+enters the controlled error state naming the method that failed (never a false
+success). Detection is identical across passes (same faces/OCR/PII/zones — only
+the inpaint fill differs), so the logical summary is reported once; an unexpected
+per-method count difference is flagged, not hidden.
+
 Thread-safety: ProcessingJob guards its mutable snapshot with a lock because the
 worker thread writes it while Flask request threads read it for polling.
 """
@@ -122,11 +135,18 @@ class ProcessingJob:
     overall frame progress, cumulative faces blurred, and cumulative PII
     redactions; stages whose internals the callback does not expose are shown as
     active/idle rather than given fabricated counts.
+
+    A job runs one or more sequential *passes*. Normally there is a single pass
+    (blur, or a plain fake_data run) writing `output_path`. When the harness
+    supplies `compare_methods` (fake_data TELEA-vs-NS comparison) there is one
+    pass per method, each with its own `inpaint_method` and output file; overall
+    progress spans all passes and COMPLETE is reached only after every pass
+    succeeds.
     """
 
     def __init__(self, uid, input_path, output_path, mode, zones,
                  ocr_sample_rate=1, face_min_confidence=None, runner=None,
-                 preview_every=_PREVIEW_EVERY):
+                 preview_every=_PREVIEW_EVERY, compare_methods=None):
         self.uid = uid
         self.input_path = input_path
         self.output_path = output_path
@@ -141,6 +161,27 @@ class ProcessingJob:
         # (throttle). Injectable so tests can force/relax the cadence.
         self._preview_every = max(1, int(preview_every))
 
+        # Build the sequential pass list. `compare_methods` is a list of
+        # (label, inpaint_method, output_path) supplied by the harness for the
+        # fake_data TELEA/NS comparison; without it the job runs a single pass
+        # writing `output_path` with no explicit inpaint_method (so the pipeline
+        # keeps its own default — blur ignores it; a plain fake_data run uses
+        # TELEA). inpaint_method is passed to process_video() ONLY when set, so
+        # the blur/back-compat call is byte-identical to before.
+        if compare_methods:
+            self._passes = [
+                {"label": label, "inpaint_method": method, "output_path": path}
+                for (label, method, path) in compare_methods
+            ]
+        else:
+            self._passes = [
+                {"label": "redacted", "inpaint_method": None,
+                 "output_path": output_path},
+            ]
+        self._num_passes = len(self._passes)
+        self._pass_index = 0                       # which pass is running (0-based)
+        self._current_pass_label = self._passes[0]["label"]
+
         self._lock = threading.Lock()
         self._thread = None
         self._started_at = None
@@ -148,10 +189,14 @@ class ProcessingJob:
         self.status = PENDING
         self.frame = 0
         self.total = 0
-        self.faces = 0            # cumulative faces blurred
-        self.pii = 0             # cumulative PII regions redacted
+        self.faces = 0            # cumulative faces blurred (current pass)
+        self.pii = 0             # cumulative PII regions redacted (current pass)
         self.elapsed = 0.0
-        self.summary = None       # process_video()'s return value, on success
+        self.summary = None       # canonical (first pass) summary, on success
+        self.summaries = {}       # label -> summary for each completed pass
+        self.output_paths = {p["label"]: p["output_path"] for p in self._passes}
+        self.summary_discrepancy = None  # set if passes disagree on detection
+        self.failed_method = None  # label of the pass that errored, if any
         self.error = None         # controlled error message, on failure
         self.log = []             # list of technical log line strings
 
@@ -182,24 +227,24 @@ class ProcessingJob:
     # -- worker ---------------------------------------------------------------
     def _run(self):
         try:
-            summary = self._runner(
-                self.input_path,
-                self.output_path,
-                mode=self.mode,
-                zones=self.zones,
-                ocr_sample_rate=self.ocr_sample_rate,
-                face_min_confidence=self.face_min_confidence,
-                progress_callback=self._on_progress,
-                preview_callback=self._on_preview,
-            )
+            for idx, p in enumerate(self._passes):
+                self._run_pass(idx, p)
+            # Every pass succeeded. Detection counts must agree across methods
+            # (same input, same detection — only the inpaint fill differs); flag
+            # a difference rather than silently reporting one method's numbers.
+            self._check_summary_discrepancy()
             with self._lock:
-                self.summary = summary
                 self.status = COMPLETE
                 self.elapsed = _clock() - self._started_at
-            self._append_log(
-                "complete — %d frames, %d faces, output ready"
-                % (summary.get("frames_processed", 0), summary.get("faces_blurred", 0))
-            )
+            if self._num_passes > 1:
+                self._append_log("complete — %d outputs ready (%s)"
+                                 % (self._num_passes,
+                                    ", ".join(p["label"] for p in self._passes)))
+            else:
+                s = self.summary or {}
+                self._append_log(
+                    "complete — %d frames, %d faces, output ready"
+                    % (s.get("frames_processed", 0), s.get("faces_blurred", 0)))
         except Exception as exc:  # controlled failure surface for the UI
             with self._lock:
                 self.status = ERROR
@@ -210,6 +255,89 @@ class ProcessingJob:
             self._append_log("ERROR — " + self.error)
             for line in traceback.format_exc().rstrip().splitlines():
                 self._append_log("  " + line)
+
+    def _run_pass(self, idx, p):
+        """Run one pipeline pass (process_video call) and record its summary.
+
+        Progress counters are reset per pass so each pass reports its own
+        frames/faces/pii — the same input processed twice must not double-count.
+        A failure is re-raised (single pass: unchanged message; comparison:
+        wrapped to name the method) so `_run` records the controlled error.
+        """
+        with self._lock:
+            self._pass_index = idx
+            self._current_pass_label = p["label"]
+            self.frame = 0
+            self.total = 0
+            self.faces = 0
+            self.pii = 0
+        method = p["inpaint_method"]
+        if self._num_passes > 1:
+            self._append_log(
+                "pass %d/%d — %s (inpaint_method=%s)"
+                % (idx + 1, self._num_passes, p["label"], method))
+
+        kwargs = dict(
+            mode=self.mode,
+            zones=self.zones,
+            ocr_sample_rate=self.ocr_sample_rate,
+            face_min_confidence=self.face_min_confidence,
+            progress_callback=self._on_progress,
+            preview_callback=self._on_preview,
+        )
+        # Only forward inpaint_method when this pass specifies one, so the
+        # blur/back-compat call to process_video() is unchanged.
+        if method is not None:
+            kwargs["inpaint_method"] = method
+
+        try:
+            summary = self._runner(self.input_path, p["output_path"], **kwargs)
+        except Exception as exc:
+            self.failed_method = p["label"]
+            if self._num_passes > 1:
+                raise RuntimeError(
+                    "%s pass failed — %s: %s"
+                    % (p["label"].upper(), type(exc).__name__, exc)) from exc
+            raise
+
+        with self._lock:
+            self.summaries[p["label"]] = summary
+            if self.summary is None:
+                self.summary = summary
+        if self._num_passes > 1:
+            self._append_log(
+                "pass %d/%d complete — %s: %d frames, %d faces"
+                % (idx + 1, self._num_passes, p["label"],
+                   summary.get("frames_processed", 0),
+                   summary.get("faces_blurred", 0)))
+
+    def _check_summary_discrepancy(self):
+        """Flag (never hide) a per-method disagreement on detection counts.
+
+        Inpainting changes pixels, not detections, so both passes should report
+        identical frames/faces/PII/zones. If they don't, record a human-readable
+        note (surfaced on Results + in the log) instead of silently trusting one.
+        """
+        if len(self.summaries) < 2:
+            return
+
+        def _detection_view(s):
+            return (
+                s.get("frames_processed"),
+                s.get("faces_blurred"),
+                tuple(sorted((s.get("pii_by_type") or {}).items())),
+                s.get("zones_applied"),
+            )
+
+        views = {label: _detection_view(s) for label, s in self.summaries.items()}
+        if len(set(views.values())) > 1:
+            self.summary_discrepancy = (
+                "Detection counts differ between methods — "
+                + "; ".join(
+                    "%s: frames=%s faces=%s pii=%s zones=%s"
+                    % (label, v[0], v[1], dict(v[2]), v[3])
+                    for label, v in views.items()))
+            self._append_log("WARNING — " + self.summary_discrepancy)
 
     def _on_progress(self, event):
         """Pipeline progress_callback: one call per processed frame."""
@@ -223,9 +351,13 @@ class ProcessingJob:
         frame = event.get("frame", 0)
         total = event.get("total", 0)
         if frame == 1 or frame % 30 == 0 or (total and frame == total):
+            # Prefix the method on a comparison job so the log makes the two
+            # sequential passes legible ("telea frame 30/60", "ns frame 30/60").
+            prefix = ("%s " % self._current_pass_label) if self._num_passes > 1 else ""
             self._append_log(
-                "frame %d/%s | faces this frame: %d | pii regions: %d"
-                % (frame, total or "?", event.get("faces", 0), event.get("pii", 0))
+                "%sframe %d/%s | faces this frame: %d | pii regions: %d"
+                % (prefix, frame, total or "?", event.get("faces", 0),
+                   event.get("pii", 0))
             )
 
     def _on_preview(self, event):
@@ -284,6 +416,12 @@ class ProcessingJob:
             end = PENDING
 
         zones_n = len(self.zones)
+        if self._num_passes > 1:
+            redactor_detail = ("mode: %s — comparing telea + ns (pass %d/%d: %s)"
+                               % (self.mode, self._pass_index + 1,
+                                  self._num_passes, self._current_pass_label))
+        else:
+            redactor_detail = "mode: %s" % self.mode
         return [
             {"name": "face_detector", "state": end, "detail": "%d faces blurred" % self.faces},
             {"name": "ocr_detector", "state": end,
@@ -291,26 +429,36 @@ class ProcessingJob:
             {"name": "pii_matcher", "state": end, "detail": "%d PII regions" % self.pii},
             {"name": "zone_manager", "state": end,
              "detail": "%d static zone(s)/frame" % zones_n},
-            {"name": "redactor", "state": end, "detail": "mode: %s" % self.mode},
+            {"name": "redactor", "state": end, "detail": redactor_detail},
             {"name": "video writer / ffmpeg mux", "state": end,
              "detail": "writing output" if running else
                        ("output ready" if self.status == COMPLETE else "—")},
         ]
 
+    def _percent_locked(self):
+        """Overall progress across all passes (call holding self._lock).
+
+        Each pass is an equal slice of the bar: completed passes contribute their
+        full slice and the running pass contributes its own frame fraction. For a
+        single-pass job this reduces to the old frame/total percentage; for a
+        fake_data comparison TELEA fills 0–50% and NS 50–100%.
+        """
+        if self.status == COMPLETE:
+            return 100
+        frac = float(self._pass_index)
+        if self.total:
+            frac += self.frame / self.total
+        return max(0, min(100, int(frac * 100 / self._num_passes)))
+
     def snapshot(self):
         """Thread-safe view for the polling endpoint."""
         with self._lock:
-            percent = 0
-            if self.total:
-                percent = min(100, int(self.frame * 100 / self.total))
-            elif self.status == COMPLETE:
-                percent = 100
             return {
                 "uid": self.uid,
                 "status": self.status,
                 "frame": self.frame,
                 "total": self.total,
-                "percent": percent,
+                "percent": self._percent_locked(),
                 "faces": self.faces,
                 "pii": self.pii,
                 "elapsed": round(self.elapsed, 1),
@@ -321,6 +469,13 @@ class ProcessingJob:
                 "output_ready": self.status == COMPLETE,
                 "stages": self.stages(),
                 "log": list(self.log),
+                # Two-pass fake_data comparison progress (1 for a normal job).
+                "num_passes": self._num_passes,
+                "pass_index": self._pass_index,
+                "pass_label": self._current_pass_label,
+                "summaries": dict(self.summaries),
+                "summary_discrepancy": self.summary_discrepancy,
+                "failed_method": self.failed_method,
                 # Lightweight preview signaling only — the image itself is served
                 # by a dedicated endpoint, never embedded in this poll (D21).
                 "has_preview": self._preview_jpeg is not None,
