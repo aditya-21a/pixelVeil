@@ -538,7 +538,6 @@
   var blurRow    = document.getElementById("uploadBlurIntensityRow");
   var pixRow     = document.getElementById("uploadPixelateIntensityRow");
   var blurSelect = document.getElementById("uploadFaceBlurIntensity");
-  var pixSelect  = document.getElementById("uploadFacePixelateIntensity");
   var savedBadge = document.getElementById("faceRedactionSaved");
 
   var saveTimer = null;
@@ -554,7 +553,6 @@
     if (pixRow)  pixRow.style.display  = (m === "pixelate") ? "" : "none";
     // Keep disabled so the hidden select isn't accidentally read elsewhere.
     if (blurSelect) blurSelect.disabled = (m !== "blur");
-    if (pixSelect)  pixSelect.disabled  = (m !== "pixelate");
   }
 
   function saveNow() {
@@ -562,7 +560,7 @@
     var body = {
       face_redaction_method:   m,
       face_blur_intensity:     blurSelect ? blurSelect.value  : "medium",
-      face_pixelate_intensity: pixSelect  ? pixSelect.value   : "medium",
+      face_pixelate_intensity: "medium", // standard/ignored anyway
     };
     fetch("/face-redaction", {
       method: "POST",
@@ -593,7 +591,6 @@
 
   // Wire intensity selects.
   if (blurSelect) blurSelect.addEventListener("change", saveNow);
-  if (pixSelect)  pixSelect.addEventListener("change",  saveNow);
 
   // Set initial row visibility based on server-rendered checked state.
   syncRows();

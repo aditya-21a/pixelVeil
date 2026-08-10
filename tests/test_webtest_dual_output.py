@@ -163,8 +163,8 @@ class TestDualPassJob(unittest.TestCase):
         self.assertEqual(set(snap["summaries"]), {"telea", "ns"})
         self.assertEqual(snap["summaries"]["telea"]["frames_processed"], 7)
         self.assertEqual(snap["summaries"]["ns"]["frames_processed"], 7)
-        # canonical single summary is also present (shown once on Results)
-        self.assertEqual(snap["summary"]["frames_processed"], 7)
+        # canonical single summary is also present (shows sum of passes)
+        self.assertEqual(snap["summary"]["frames_processed"], 14)
 
     def test_not_complete_after_only_telea_and_progress_is_halfway(self):
         runner = _NsStartProbeRunner()

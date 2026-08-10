@@ -239,6 +239,19 @@ class ProcessingJob:
             # a difference rather than silently reporting one method's numbers.
             self._check_summary_discrepancy()
             with self._lock:
+                # Sum frames_processed across all actual passes, but keep detection
+                # counts (faces, PII, zones) from the first pass so they represent
+                # the unique detections in the input video without doubling.
+                total_frames = sum(s.get("frames_processed", 0) for s in self.summaries.values())
+                first_summary = next(iter(self.summaries.values()))
+
+                self.summary = {
+                    "frames_processed": total_frames,
+                    "faces_blurred": first_summary.get("faces_blurred", 0),
+                    "pii_by_type": first_summary.get("pii_by_type", {}),
+                    "zones_applied": first_summary.get("zones_applied", 0),
+                }
+
                 self.status = COMPLETE
                 self.elapsed = _clock() - self._started_at
             if self._num_passes > 1:

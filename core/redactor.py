@@ -350,18 +350,17 @@ def redact_face(frame, bbox, method="blur", blur_intensity="medium", pixelate_in
         
     elif method == "pixelate":
         w = int(bbox[2])
-        if pixelate_intensity == "low":
-            factor = max(2, w // 20)
-        elif pixelate_intensity == "high":
-            factor = max(2, w // 4)
-        else:
-            factor = max(2, w // 8)
-            
+        # Standard pixelation intensity uses a divisor of 17 (w // 17).
+        # This keeps the pixel blocks stable and dynamically scaled to the face size.
+        factor = max(2, w // 17)
+
         down_w = max(1, rw // factor)
         down_h = max(1, rh // factor)
-        
+
         small = cv2.resize(roi, (down_w, down_h), interpolation=cv2.INTER_LINEAR)
         effect = cv2.resize(small, (rw, rh), interpolation=cv2.INTER_NEAREST)
+
+
     else:
         effect = roi
         

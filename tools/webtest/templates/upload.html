@@ -66,12 +66,7 @@
         </select>
       </div>
       <div id="uploadPixelateIntensityRow" class="intensity-row">
-        <label class="field" for="uploadFacePixelateIntensity">Pixelate intensity</label>
-        <select id="uploadFacePixelateIntensity" class="intensity-select">
-          <option value="low"    {% if settings.face_pixelate_intensity == 'low'    %}selected{% endif %}>Low</option>
-          <option value="medium" {% if settings.face_pixelate_intensity == 'medium' %}selected{% endif %}>Medium</option>
-          <option value="high"   {% if settings.face_pixelate_intensity == 'high'   %}selected{% endif %}>High</option>
-        </select>
+        <span class="field" style="font-style: italic; color: var(--text-muted);">Standard (intensity 17)</span>
       </div>
       <p id="faceRedactionSaved" class="muted" style="display:none;font-size:12px;margin-top:8px;">✓ Saved</p>
     </div>
