@@ -146,7 +146,8 @@ class ProcessingJob:
 
     def __init__(self, uid, input_path, output_path, mode, zones,
                  ocr_sample_rate=1, face_min_confidence=None, runner=None,
-                 preview_every=_PREVIEW_EVERY, compare_methods=None):
+                 preview_every=_PREVIEW_EVERY, compare_methods=None,
+                 face_redaction_method="blur", face_blur_intensity="medium", face_pixelate_intensity="medium"):
         self.uid = uid
         self.input_path = input_path
         self.output_path = output_path
@@ -154,6 +155,9 @@ class ProcessingJob:
         self.zones = list(zones or [])
         self.ocr_sample_rate = ocr_sample_rate
         self.face_min_confidence = face_min_confidence
+        self.face_redaction_method = face_redaction_method
+        self.face_blur_intensity = face_blur_intensity
+        self.face_pixelate_intensity = face_pixelate_intensity
         # Injectable for tests: defaults to the real pipeline entry point, so
         # web tests can substitute a fake and never run OCR.
         self._runner = runner or video_pipeline.process_video
@@ -286,6 +290,9 @@ class ProcessingJob:
             face_min_confidence=self.face_min_confidence,
             progress_callback=self._on_progress,
             preview_callback=self._on_preview,
+            face_redaction_method=self.face_redaction_method,
+            face_blur_intensity=self.face_blur_intensity,
+            face_pixelate_intensity=self.face_pixelate_intensity,
         )
         # Only forward inpaint_method when this pass specifies one, so the
         # blur/back-compat call to process_video() is unchanged.

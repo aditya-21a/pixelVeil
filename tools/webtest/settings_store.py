@@ -33,6 +33,9 @@ from core import pii_matcher
 #   * face confidence    -> face_detector.DEFAULT_MIN_CONFIDENCE
 #   * PII patterns       -> pii_matcher's shipped defaults
 DEFAULT_OCR_SAMPLE_RATE = 1
+DEFAULT_FACE_REDACTION_METHOD = "blur"
+DEFAULT_FACE_BLUR_INTENSITY = "medium"
+DEFAULT_FACE_PIXELATE_INTENSITY = "medium"
 
 
 def _default_face_confidence():
@@ -48,6 +51,9 @@ _LOCK = threading.Lock()
 _settings = {
     "ocr_sample_rate": DEFAULT_OCR_SAMPLE_RATE,
     "face_min_confidence": _default_face_confidence(),
+    "face_redaction_method": DEFAULT_FACE_REDACTION_METHOD,
+    "face_blur_intensity": DEFAULT_FACE_BLUR_INTENSITY,
+    "face_pixelate_intensity": DEFAULT_FACE_PIXELATE_INTENSITY,
 }
 
 
@@ -56,6 +62,9 @@ def defaults():
     return {
         "ocr_sample_rate": DEFAULT_OCR_SAMPLE_RATE,
         "face_min_confidence": _default_face_confidence(),
+        "face_redaction_method": DEFAULT_FACE_REDACTION_METHOD,
+        "face_blur_intensity": DEFAULT_FACE_BLUR_INTENSITY,
+        "face_pixelate_intensity": DEFAULT_FACE_PIXELATE_INTENSITY,
         "pii_patterns": pii_matcher.get_default_patterns(),
     }
 
@@ -71,6 +80,9 @@ def get_settings():
         return {
             "ocr_sample_rate": _settings["ocr_sample_rate"],
             "face_min_confidence": _settings["face_min_confidence"],
+            "face_redaction_method": _settings["face_redaction_method"],
+            "face_blur_intensity": _settings["face_blur_intensity"],
+            "face_pixelate_intensity": _settings["face_pixelate_intensity"],
             "pii_patterns": pii_matcher.get_patterns(),
             "defaults": defaults(),
         }
@@ -104,8 +116,21 @@ def _validate_face_confidence(value):
     return value
 
 
+def _validate_face_redaction_method(value):
+    if value not in ("blur", "pixelate"):
+        raise ValueError("Face redaction method must be 'blur' or 'pixelate'.")
+    return value
+
+
+def _validate_intensity(value):
+    if value not in ("low", "medium", "high"):
+        raise ValueError("Intensity must be 'low', 'medium', or 'high'.")
+    return value
+
+
 def update_settings(ocr_sample_rate=None, face_min_confidence=None,
-                    pii_patterns=None):
+                    pii_patterns=None, face_redaction_method=None,
+                    face_blur_intensity=None, face_pixelate_intensity=None):
     """Validate and apply a partial settings update; return the new settings.
 
     Only the supplied fields change. Validation is all-or-nothing across the
@@ -120,11 +145,20 @@ def update_settings(ocr_sample_rate=None, face_min_confidence=None,
     """
     new_rate = None
     new_conf = None
+    new_method = None
+    new_blur_int = None
+    new_pix_int = None
 
     if ocr_sample_rate is not None:
         new_rate = _validate_ocr_sample_rate(ocr_sample_rate)
     if face_min_confidence is not None:
         new_conf = _validate_face_confidence(face_min_confidence)
+    if face_redaction_method is not None:
+        new_method = _validate_face_redaction_method(face_redaction_method)
+    if face_blur_intensity is not None:
+        new_blur_int = _validate_intensity(face_blur_intensity)
+    if face_pixelate_intensity is not None:
+        new_pix_int = _validate_intensity(face_pixelate_intensity)
     if pii_patterns is not None:
         if not isinstance(pii_patterns, dict) or not pii_patterns:
             raise ValueError("PII patterns must be a non-empty mapping.")
@@ -137,6 +171,12 @@ def update_settings(ocr_sample_rate=None, face_min_confidence=None,
             _settings["ocr_sample_rate"] = new_rate
         if new_conf is not None:
             _settings["face_min_confidence"] = new_conf
+        if new_method is not None:
+            _settings["face_redaction_method"] = new_method
+        if new_blur_int is not None:
+            _settings["face_blur_intensity"] = new_blur_int
+        if new_pix_int is not None:
+            _settings["face_pixelate_intensity"] = new_pix_int
 
     return get_settings()
 
@@ -147,6 +187,9 @@ def reset_settings():
     with _LOCK:
         _settings["ocr_sample_rate"] = DEFAULT_OCR_SAMPLE_RATE
         _settings["face_min_confidence"] = _default_face_confidence()
+        _settings["face_redaction_method"] = DEFAULT_FACE_REDACTION_METHOD
+        _settings["face_blur_intensity"] = DEFAULT_FACE_BLUR_INTENSITY
+        _settings["face_pixelate_intensity"] = DEFAULT_FACE_PIXELATE_INTENSITY
     return get_settings()
 
 
@@ -162,4 +205,7 @@ def processing_kwargs():
         return {
             "ocr_sample_rate": _settings["ocr_sample_rate"],
             "face_min_confidence": _settings["face_min_confidence"],
+            "face_redaction_method": _settings["face_redaction_method"],
+            "face_blur_intensity": _settings["face_blur_intensity"],
+            "face_pixelate_intensity": _settings["face_pixelate_intensity"],
         }

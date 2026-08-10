@@ -3,9 +3,7 @@
 
 {% block content %}
 <!-- Screen 1 — Upload (design.md 2.1). File picker + drag/drop, mode toggle,
-     and click-drag static-zone drawing on the first frame. The Process Video
-     button is wired to a controlled placeholder only — actual pipeline wiring
-     is the next Phase 3 task. Behaviour lives in static/js/app.js. -->
+     and click-drag static-zone drawing on the first frame. -->
 <h1>Upload</h1>
 <p class="lede">Pick a screen recording to redact, choose a redaction mode, and
   (once a video is loaded) mark any always-redact zones on the first frame.</p>
@@ -23,8 +21,61 @@
 
 <section class="card">
   <h2>Redaction mode</h2>
-  <label class="radio"><input type="radio" name="mode" value="blur" checked> Blur</label>
+  <label class="radio"><input type="radio" name="mode" value="blur" checked> Blur faces &amp; PII</label>
   <label class="radio"><input type="radio" name="mode" value="fake_data"> Replace with fake data</label>
+  <p class="muted" id="fakeDataNote" style="display:none;margin-top:8px;">
+    Runs two passes (TELEA + Navier-Stokes inpainting) for comparison — each pass processes all
+    frames, so a 120-frame video shows 240 frames total. Face settings below do not apply in this mode.
+  </p>
+</section>
+
+<section class="card" id="faceRedactionCard">
+  <h2>Face anonymization</h2>
+  <p class="muted">Choose how detected faces are anonymized. Changes take effect
+    on the next processing run.</p>
+
+  <div class="face-redaction-grid">
+    <div class="face-method-col">
+      <p class="field-label">Method</p>
+      <label class="face-method-option">
+        <input type="radio" name="faceRedactionMethod" value="blur"
+               {% if settings.face_redaction_method == 'blur' %}checked{% endif %}>
+        <span class="face-method-label">
+          <strong>Blur</strong>
+          <span class="muted">Gaussian blur — soft, natural-looking</span>
+        </span>
+      </label>
+      <label class="face-method-option">
+        <input type="radio" name="faceRedactionMethod" value="pixelate"
+               {% if settings.face_redaction_method == 'pixelate' %}checked{% endif %}>
+        <span class="face-method-label">
+          <strong>Pixelate</strong>
+          <span class="muted">Pixel mosaic — bold, clearly redacted</span>
+        </span>
+      </label>
+    </div>
+
+    <div class="face-intensity-col">
+      <p class="field-label">Intensity</p>
+      <div id="uploadBlurIntensityRow" class="intensity-row">
+        <label class="field" for="uploadFaceBlurIntensity">Blur intensity</label>
+        <select id="uploadFaceBlurIntensity" class="intensity-select">
+          <option value="low"    {% if settings.face_blur_intensity == 'low'    %}selected{% endif %}>Low</option>
+          <option value="medium" {% if settings.face_blur_intensity == 'medium' %}selected{% endif %}>Medium</option>
+          <option value="high"   {% if settings.face_blur_intensity == 'high'   %}selected{% endif %}>High</option>
+        </select>
+      </div>
+      <div id="uploadPixelateIntensityRow" class="intensity-row">
+        <label class="field" for="uploadFacePixelateIntensity">Pixelate intensity</label>
+        <select id="uploadFacePixelateIntensity" class="intensity-select">
+          <option value="low"    {% if settings.face_pixelate_intensity == 'low'    %}selected{% endif %}>Low</option>
+          <option value="medium" {% if settings.face_pixelate_intensity == 'medium' %}selected{% endif %}>Medium</option>
+          <option value="high"   {% if settings.face_pixelate_intensity == 'high'   %}selected{% endif %}>High</option>
+        </select>
+      </div>
+      <p id="faceRedactionSaved" class="muted" style="display:none;font-size:12px;margin-top:8px;">✓ Saved</p>
+    </div>
+  </div>
 </section>
 
 <section class="card">
@@ -45,3 +96,4 @@
 <button id="processBtn" class="btn primary" disabled>Process Video</button>
 <p id="processStatus" class="muted">Disabled until a valid video is loaded.</p>
 {% endblock %}
+

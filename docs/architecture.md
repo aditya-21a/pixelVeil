@@ -27,17 +27,17 @@ PixelVeil is a Windows desktop app, built in Python, that takes a video file and
                              │
         ┌────────────────────┼────────────────────┐
         ▼                    ▼                     ▼
-┌─────────────────┐   ┌────────────────┐   ┌──────────────────┐
+┌────────────────┐   ┌─────────────────┐   ┌───────────────────┐
 │ Face Detector  │   │  OCR Detector   │   │  Zone Manager     │
 │ (MediaPipe)    │   │ (RapidOCR/ONNX) │   │ (user-drawn boxes)│
 └───────┬────────┘   └────────┬────────┘   └─────────┬─────────┘
-        │                     │                       │
-        │            ┌────────▼────────┐              │
-        │            │  PII Matcher     │              │
-        │            │  (regex)         │              │
-        │            └────────┬────────┘              │
-        │                     │                       │
-        └─────────────┬───────┴───────────────────────┘
+        │                     │                      │
+        │            ┌────────▼────────┐             │
+        │            │  PII Matcher     │            │
+        │            │  (regex)         │            │
+        │            └────────┬────────┘             │
+        │                     │                      │
+        └─────────────┬───────┴──────────────────────┘
                        ▼
               ┌─────────────────┐
               │    Redactor      │
@@ -67,16 +67,13 @@ PixelVeil is a Windows desktop app, built in Python, that takes a video file and
 
 ### 3.2 OCR (Text Detection for PII)
 
-> **Updated:** the OCR backend is now **RapidOCR on ONNX Runtime** (see DECISIONS.md **D17**, which supersedes D6). The original Tesseract comparison below is retained for history; the reasoning about clean/horizontal on-screen text still applies, but the "separate binary to install and bundle" cost has been eliminated by RapidOCR's self-contained ONNX models.
-
 | Option | Verdict | Why |
 |---|---|---|
-| **RapidOCR (via `rapidocr` + `onnxruntime`)** | **CHOSEN (current — D17)** | Pure-pip, fully offline: the `rapidocr` wheel bundles its PP-OCRv6 detection/recognition ONNX models, so there's no separate binary to install or bundle at packaging time (unlike Tesseract). Small ONNX models run efficiently on CPU-only Windows, which suits PixelVeil's repeated per-frame OCR on sampled frames. The backend is isolated inside `core/ocr_detector.py`; the rest of the pipeline only sees the normalized `detect_text(frame) -> list[(text, bbox)]` output. |
-| **Tesseract (via `pytesseract`)** | **Superseded (was CHOSEN — D6)** | Free, extremely well documented, fast enough on sampled frames. The one real cost — Tesseract is a separate binary that must be installed on the dev machine and bundled with the packaged app — is precisely what D17/RapidOCR removes. No longer the backend. |
+| **Tesseract (via `pytesseract`)** | **CHOSEN** | Free, extremely well documented, fast enough when run on sampled frames rather than every frame. The one real cost: Tesseract is a separate binary (not pure Python), so it must be installed on the dev machine and later bundled with the packaged app — this is a known, well-documented packaging step, not a blocker. |
 | EasyOCR | Rejected for v1 | Pure Python, no external binary — simpler to install. But it's PyTorch-based, meaning a much heavier dependency footprint (hundreds of MB), slower per-frame inference, and a larger final installer size. Better accuracy on stylized/rotated text, but not worth the weight for v1 where most on-screen text (dashboards, forms, CRMs) is clean and horizontal. |
 | PaddleOCR | Rejected | Comparable accuracy to EasyOCR, but historically finicky to install cleanly on Windows, more dependency conflicts reported. Not worth the setup risk for v1. |
 
-**v2 note:** if RapidOCR's accuracy on real-world dashboard/CRM screenshots proves insufficient, revisit a heavier "high accuracy" mode — but keep RapidOCR as the fast, offline default. Do not add a second/fallback OCR engine without an explicit decision.
+**v2 note:** if Tesseract's accuracy on real-world dashboard/CRM screenshots proves insufficient, swap in EasyOCR as a heavier-but-more-accurate mode, not a full replacement — keep Tesseract as the fast default.
 
 ### 3.3 PII Pattern Matching
 
@@ -123,7 +120,7 @@ pixelveil/
 ├── main.py                  # GUI entry point, launches the app
 ├── core/
 │   ├── face_detector.py     # MediaPipe wrapper — detect_faces(frame) -> list of bounding boxes
-│   ├── ocr_detector.py      # RapidOCR/ONNX wrapper — detect_text(frame) -> list of (text, bbox)
+│   ├── ocr_detector.py      # Tesseract wrapper — detect_text(frame) -> list of (text, bbox)
 │   ├── pii_matcher.py       # Regex patterns — match_pii(text) -> PII type or None
 │   ├── redactor.py          # Draws blur / solid box / fake-data text onto a frame given bboxes
 │   ├── zone_manager.py      # Stores and applies user-marked static redaction zones
@@ -132,8 +129,8 @@ pixelveil/
 │   └── app.py                # Tkinter interface: file picker, mode toggle, zone canvas, progress bar
 ├── utils/
 │   └── fake_data.py          # Generates placeholder text ("Test User 1", fake emails, etc.)
-├── assets/                  # (No bundled OCR binary needed — RapidOCR's ONNX
-│                            #  models ship inside the `rapidocr` package. See D17.)
+├── assets/
+│   └── tesseract/             # Bundled Tesseract binary for distribution (added at packaging stage)
 ├── tests/
 │   └── sample_videos/         # Test videos with planted fake PII for validation
 ├── requirements.txt
@@ -164,16 +161,3 @@ pixelveil/
 - All of this is CPU-bound by default (no GPU dependency required for v1) — acceptable for a first version, but if processing a 10-minute video takes several minutes, that's worth surfacing honestly in the UI via a progress bar rather than pretending it's instant.
 
 ---
-
-## 8. Dependencies (Initial requirements.txt)
-
-```
-opencv-python
-mediapipe
-rapidocr
-onnxruntime
-pillow
-imageio-ffmpeg
-```
-
-(OCR now needs **no** separate binary install: RapidOCR ships its detection/recognition ONNX models inside the `rapidocr` wheel and runs them via `onnxruntime`, fully offline. This replaces the earlier Tesseract setup — see DECISIONS.md D17, which supersedes D6. The old `assets/tesseract/` bundling step no longer applies.)

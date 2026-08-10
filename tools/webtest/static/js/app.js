@@ -156,8 +156,11 @@
     processBtn.disabled = false;
     processStatus.textContent = "Ready to process.";
 
-    // Preserve whatever mode was selected before the file was chosen.
-    if (selectedMode() !== "blur") syncMode();
+    // Always sync the selected mode to the server after a new upload so the
+    // server's per-uid mode is authoritative even if it stayed on "blur"
+    // (the server default) — prevents a stale fake_data mode from a prior
+    // upload carrying over into this new uid's job.
+    syncMode();
   }
 
   // --- zone drawing --------------------------------------------------------
@@ -219,7 +222,17 @@
   }
 
   // --- mode ----------------------------------------------------------------
+  function syncModeUI() {
+    // Show/hide the explanatory note for the fake_data two-pass behaviour.
+    // Face anonymization card stays visible for BOTH modes — faces are blurred
+    // in fake_data mode too.
+    var isBlur = (selectedMode() === "blur");
+    var fakeNote = document.getElementById("fakeDataNote");
+    if (fakeNote) fakeNote.style.display = isBlur ? "none" : "";
+  }
+
   function syncMode() {
+    syncModeUI(); // always update note visibility immediately
     if (!upload) return;
     fetch("/mode", {
       method: "POST",
@@ -227,20 +240,27 @@
       body: JSON.stringify({ id: upload.id, mode: selectedMode() }),
     });
   }
+
   Array.prototype.forEach.call(
     document.querySelectorAll('input[name="mode"]'),
     function (el) { el.addEventListener("change", syncMode); }
   );
 
+  // Run on page load so the note visibility matches the initial radio state.
+  syncModeUI();
+
   // --- process (start background job, then go to the Processing screen) ----
   processBtn.addEventListener("click", function () {
     if (!upload) return;
     processBtn.disabled = true; // prevent a double-start from a double-click
-    processStatus.textContent = "Starting…";
+    processStatus.textContent = "Starting\u2026";
+    // Include mode at click-time so the server uses the exact current radio
+    // value, regardless of whether /mode was called previously. This is the
+    // authoritative source — eliminates any stale-sync race condition.
     fetch("/process", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: upload.id }),
+      body: JSON.stringify({ id: upload.id, mode: selectedMode() }),
     })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
       .then(function (res) {
@@ -481,8 +501,6 @@
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (!res.ok) {
-          // Validation rejected the change; the server kept the last valid
-          // config, so the form still reflects a usable state.
           showFeedback(res.j.error || "Could not save settings.", false);
           return;
         }
@@ -506,3 +524,78 @@
       .then(function () { resetBtn.disabled = false; });
   });
 })();
+
+// ===========================================================================
+// Upload page — Face anonymization controls. Auto-saves to /face-redaction
+// whenever the user changes method or intensity. Bails on other pages.
+// ===========================================================================
+(function () {
+  "use strict";
+
+  var card = document.getElementById("faceRedactionCard");
+  if (!card) return; // not the Upload page
+
+  var blurRow    = document.getElementById("uploadBlurIntensityRow");
+  var pixRow     = document.getElementById("uploadPixelateIntensityRow");
+  var blurSelect = document.getElementById("uploadFaceBlurIntensity");
+  var pixSelect  = document.getElementById("uploadFacePixelateIntensity");
+  var savedBadge = document.getElementById("faceRedactionSaved");
+
+  var saveTimer = null;
+
+  function currentMethod() {
+    var el = document.querySelector('input[name="faceRedactionMethod"]:checked');
+    return el ? el.value : "blur";
+  }
+
+  function syncRows() {
+    var m = currentMethod();
+    if (blurRow) blurRow.style.display = (m === "blur")     ? "" : "none";
+    if (pixRow)  pixRow.style.display  = (m === "pixelate") ? "" : "none";
+    // Keep disabled so the hidden select isn't accidentally read elsewhere.
+    if (blurSelect) blurSelect.disabled = (m !== "blur");
+    if (pixSelect)  pixSelect.disabled  = (m !== "pixelate");
+  }
+
+  function saveNow() {
+    var m = currentMethod();
+    var body = {
+      face_redaction_method:   m,
+      face_blur_intensity:     blurSelect ? blurSelect.value  : "medium",
+      face_pixelate_intensity: pixSelect  ? pixSelect.value   : "medium",
+    };
+    fetch("/face-redaction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) return;
+        if (savedBadge) {
+          savedBadge.style.display = "";
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(function () {
+            savedBadge.style.display = "none";
+          }, 2000);
+        }
+      })
+      .catch(function () { /* network error — ignore */ });
+  }
+
+  // Wire method radios.
+  Array.prototype.forEach.call(
+    document.querySelectorAll('input[name="faceRedactionMethod"]'),
+    function (el) {
+      el.addEventListener("change", function () { syncRows(); saveNow(); });
+    }
+  );
+
+  // Wire intensity selects.
+  if (blurSelect) blurSelect.addEventListener("change", saveNow);
+  if (pixSelect)  pixSelect.addEventListener("change",  saveNow);
+
+  // Set initial row visibility based on server-rendered checked state.
+  syncRows();
+})();
+

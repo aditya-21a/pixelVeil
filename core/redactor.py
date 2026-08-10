@@ -234,6 +234,144 @@ def blur_region(frame, bbox):
     return frame
 
 
+def _get_face_mask_and_box(frame_shape, bbox):
+    """
+    Given a face detector bbox (x, y, w, h) and frame shape (H, W),
+    compute an expanded rounded/oval mask that conservatively covers
+    the forehead, cheeks, and chin.
+    
+    Returns:
+        (clamped_roi_bbox, mask_roi)
+        - clamped_roi_bbox: (x0, y0, cw, ch) the region of the frame
+        - mask_roi: 2D numpy array (float32, 0.0 to 1.0) of shape (ch, cw)
+          representing the alpha mask.
+    """
+    if bbox is None or len(bbox) != 4:
+        return None, None
+    x, y, w, h = (int(v) for v in bbox)
+    if w <= 0 or h <= 0:
+        return None, None
+
+    H, W = frame_shape[:2]
+    
+    # Conservatively expand bbox to cover forehead, cheeks, chin.
+    # Typical face detector: y=eyebrows, y+h=mouth, x/w tight to eyes/cheeks.
+    x_min = x - 0.25 * w
+    x_max = x + w + 0.25 * w
+    y_min = y - 0.45 * h
+    y_max = y + h + 0.15 * h
+    
+    cx = (x_min + x_max) / 2.0
+    cy = (y_min + y_max) / 2.0
+    axes_x = (x_max - x_min) / 2.0
+    axes_y = (y_max - y_min) / 2.0
+    
+    # Bounding box of the ellipse, padded slightly for anti-aliasing/feathering.
+    # We add generous padding to accommodate the feathering radius.
+    feather_k = max(3, int(axes_x * 0.15))
+    if feather_k % 2 == 0:
+        feather_k += 1
+    pad = feather_k + 2
+    
+    roi_x_min = int(np.floor(x_min)) - pad
+    roi_x_max = int(np.ceil(x_max)) + pad
+    roi_y_min = int(np.floor(y_min)) - pad
+    roi_y_max = int(np.ceil(y_max)) + pad
+    
+    # Clamp roi to frame boundaries
+    c_x_min = max(0, min(roi_x_min, W))
+    c_x_max = max(0, min(roi_x_max, W))
+    c_y_min = max(0, min(roi_y_min, H))
+    c_y_max = max(0, min(roi_y_max, H))
+    
+    cw = c_x_max - c_x_min
+    ch = c_y_max - c_y_min
+    
+    if cw <= 0 or ch <= 0:
+        return None, None
+        
+    mask_roi_u8 = np.zeros((ch, cw), dtype=np.uint8)
+    
+    # Draw the ellipse into the mask ROI.
+    rel_cx = int(round(cx - c_x_min))
+    rel_cy = int(round(cy - c_y_min))
+    axes = (max(1, int(round(axes_x))), max(1, int(round(axes_y))))
+    
+    # cv2.LINE_AA gives a 1-pixel soft boundary, inside is 100% opaque.
+    cv2.ellipse(mask_roi_u8, (rel_cx, rel_cy), axes, 0, 0, 360, 255, -1, cv2.LINE_AA)
+    
+    # Feather OUTSIDE the core to make the boundary even smoother without compromising the core.
+    blurred_u8 = cv2.GaussianBlur(mask_roi_u8, (feather_k, feather_k), 0)
+    # maximum ensures the protected core (255) remains exactly 255.
+    final_mask_u8 = np.maximum(mask_roi_u8, blurred_u8)
+    
+    mask_roi = final_mask_u8.astype(np.float32) / 255.0
+    return (c_x_min, c_y_min, cw, ch), mask_roi
+
+
+def redact_face(frame, bbox, method="blur", blur_intensity="medium", pixelate_intensity="medium"):
+    """
+    Apply a privacy-first, face-following redaction mask.
+    
+    Args:
+        frame: OpenCV BGR numpy array.
+        bbox: (x, y, w, h) original detector bounding box.
+        method: "blur" or "pixelate".
+        blur_intensity: "low", "medium", "high".
+        pixelate_intensity: "low", "medium", "high".
+        
+    Returns:
+        The (same) frame, modified in place.
+    """
+    if frame is None or getattr(frame, "size", 0) == 0:
+        return frame
+        
+    roi_data = _get_face_mask_and_box(frame.shape, bbox)
+    if roi_data[0] is None:
+        return frame
+        
+    (rx, ry, rw, rh), mask = roi_data
+    roi = frame[ry:ry+rh, rx:rx+rw]
+    
+    effect = np.empty_like(roi)
+    
+    if method == "blur":
+        w = int(bbox[2])
+        if blur_intensity == "low":
+            k = max(3, w // 8)
+        elif blur_intensity == "high":
+            k = max(11, w // 2)
+        else:
+            k = max(7, w // 4)
+            
+        if k % 2 == 0:
+            k += 1
+        effect = cv2.GaussianBlur(roi, (k, k), 0)
+        
+    elif method == "pixelate":
+        w = int(bbox[2])
+        if pixelate_intensity == "low":
+            factor = max(2, w // 20)
+        elif pixelate_intensity == "high":
+            factor = max(2, w // 4)
+        else:
+            factor = max(2, w // 8)
+            
+        down_w = max(1, rw // factor)
+        down_h = max(1, rh // factor)
+        
+        small = cv2.resize(roi, (down_w, down_h), interpolation=cv2.INTER_LINEAR)
+        effect = cv2.resize(small, (rw, rh), interpolation=cv2.INTER_NEAREST)
+    else:
+        effect = roi
+        
+    mask_3d = mask[:, :, np.newaxis]
+    blended = (mask_3d * effect) + ((1.0 - mask_3d) * roi)
+    
+    frame[ry:ry+rh, rx:rx+rw] = blended.astype(np.uint8)
+    return frame
+
+
 def box_region(frame, bbox, color=(0, 0, 0)):
     """Cover the region of `frame` covered by `bbox` with a solid `color` box
     (in place). `color` is a BGR 3-tuple, default black. No-op for an

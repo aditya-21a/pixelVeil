@@ -13,7 +13,7 @@ import unittest
 import numpy as np
 import cv2
 
-from core.redactor import blur_region, box_region, fake_data_region
+from core.redactor import blur_region, box_region, fake_data_region, redact_face
 
 
 def _noisy_frame(h=200, w=300):
@@ -163,6 +163,64 @@ class TestEdgeAndInvalidBoxes(unittest.TestCase):
         # size == 0 => returned unchanged, no crash.
         box_region(empty, (0, 0, 10, 10))
         fake_data_region(empty, (0, 0, 10, 10), "x")
+        redact_face(empty, (0, 0, 10, 10))
+
+class TestRedactFace(unittest.TestCase):
+    def test_redact_face_modifies_target_region(self):
+        frame = _noisy_frame()
+        x, y, w, h = _mid_bbox()
+        before = frame[y:y + h, x:x + w].copy()
+        
+        redact_face(frame, (x, y, w, h), method="blur")
+        
+        after = frame[y:y + h, x:x + w]
+        self.assertFalse(np.array_equal(before, after))
+
+    def test_redact_face_pixelate_modifies_region(self):
+        frame = _noisy_frame()
+        x, y, w, h = _mid_bbox()
+        before = frame[y:y + h, x:x + w].copy()
+        
+        redact_face(frame, (x, y, w, h), method="pixelate", pixelate_intensity="high")
+        
+        after = frame[y:y + h, x:x + w]
+        self.assertFalse(np.array_equal(before, after))
+
+    def test_redact_face_mask_geometry(self):
+        # A uniform gray frame.
+        frame = np.full((200, 300, 3), 128, dtype=np.uint8)
+        x, y, w, h = _mid_bbox()
+        # Redact with a pure black box to observe the exact shape
+        # We can't directly inject a color, but blurring a solid color does nothing.
+        # Let's put a white box inside the gray frame.
+        frame[y-50:y+h+50, x-50:x+w+50] = 255
+        before = frame.copy()
+        
+        # Pixelating a uniform white region results in white.
+        # Wait, if we want to see the shape, we need noise or a pattern.
+        # Let's just use the noisy frame.
+        frame = _noisy_frame(h=300, w=400)
+        original = frame.copy()
+        x, y, w, h = (150, 150, 60, 60)
+        
+        redact_face(frame, (x, y, w, h), method="pixelate", pixelate_intensity="low")
+        
+        # Check that pixels far outside are unchanged
+        self.assertTrue(np.array_equal(frame[0:50, 0:50], original[0:50, 0:50]))
+        
+        # The mask expands the box. Let's find changed pixels.
+        diff = frame != original
+        changed_pixels = np.any(diff, axis=2)
+        
+        # Ensure the bounding box of changed pixels is larger than the original bbox (forehead/chin expansion)
+        y_idx, x_idx = np.where(changed_pixels)
+        min_y, max_y = np.min(y_idx), np.max(y_idx)
+        min_x, max_x = np.min(x_idx), np.max(x_idx)
+        
+        self.assertLess(min_y, y)
+        self.assertGreater(max_y, y + h - 1)
+        self.assertLess(min_x, x)
+        self.assertGreater(max_x, x + w - 1)
 
 
 if __name__ == "__main__":

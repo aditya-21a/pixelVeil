@@ -136,7 +136,8 @@ def inject_current_job():
 # --- screens (static pages; see base.html for nav) ---------------------------
 @app.route("/")
 def upload():
-    return render_template("upload.html", active="upload")
+    return render_template("upload.html", active="upload",
+                           settings=settings_store.get_settings())
 
 
 @app.route("/processing")
@@ -272,6 +273,9 @@ def save_settings():
             ocr_sample_rate=data.get("ocr_sample_rate"),
             face_min_confidence=data.get("face_min_confidence"),
             pii_patterns=data.get("pii_patterns"),
+            face_redaction_method=data.get("face_redaction_method"),
+            face_blur_intensity=data.get("face_blur_intensity"),
+            face_pixelate_intensity=data.get("face_pixelate_intensity"),
         )
     except ValueError as exc:
         return _err(400, str(exc))
@@ -282,6 +286,26 @@ def save_settings():
 def reset_settings():
     """Restore all settings (OCR rate, face confidence, PII patterns) to defaults."""
     return jsonify(settings_store.reset_settings())
+
+
+@app.route("/face-redaction", methods=["POST"])
+def set_face_redaction():
+    """Save face redaction method and intensity from the Upload page.
+
+    Body: {face_redaction_method, face_blur_intensity, face_pixelate_intensity}.
+    All fields optional; unrecognised values are rejected with 400.
+    Echoes back the full current settings so the UI can confirm the saved state.
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        new_settings = settings_store.update_settings(
+            face_redaction_method=data.get("face_redaction_method"),
+            face_blur_intensity=data.get("face_blur_intensity"),
+            face_pixelate_intensity=data.get("face_pixelate_intensity"),
+        )
+    except ValueError as exc:
+        return _err(400, str(exc))
+    return jsonify(new_settings)
 
 
 # --- Upload screen API -------------------------------------------------------
@@ -427,6 +451,13 @@ def process():
     if not st:
         return _err(400, "No video loaded — upload a valid video first.")
 
+    # Override mode from the request body if the client sent it — this is the
+    # authoritative value at click-time and avoids any stale /mode-call state.
+    # Fall back to st["mode"] (set by /mode or the upload default) if absent.
+    client_mode = data.get("mode")
+    if client_mode in VALID_MODES:
+        st["mode"] = client_mode
+
     with _JOB_LOCK:
         active = _STATE.get(_ACTIVE_JOB_UID, {}).get("job") if _ACTIVE_JOB_UID else None
         if active is not None and active.is_active():
@@ -445,6 +476,9 @@ def process():
         job_kwargs = dict(
             ocr_sample_rate=proc_kwargs["ocr_sample_rate"],
             face_min_confidence=proc_kwargs["face_min_confidence"],
+            face_redaction_method=proc_kwargs["face_redaction_method"],
+            face_blur_intensity=proc_kwargs["face_blur_intensity"],
+            face_pixelate_intensity=proc_kwargs["face_pixelate_intensity"],
         )
 
         if st["mode"] == "fake_data":

@@ -165,15 +165,15 @@ class TestProcessVideoOrchestration(unittest.TestCase):
         ), mock.patch.object(
             video_pipeline.ocr_detector, "detect_text", return_value=[],
         ), mock.patch.object(
-            video_pipeline.redactor, "blur_region"
-        ) as blur, mock.patch.object(
+            video_pipeline.redactor, "redact_face"
+        ) as redact, mock.patch.object(
             video_pipeline.redactor, "fake_data_region"
         ) as fake:
             summary = video_pipeline.process_video(
                 self.inp, self.out, mode="fake_data"
             )
-        # Face box blurred on every frame; never sent to fake-data.
-        self.assertEqual(blur.call_count, 2)  # 2 frames, 1 face each
+        # Face box redacted on every frame; never sent to fake-data.
+        self.assertEqual(redact.call_count, 2)  # 2 frames, 1 face each
         self.assertEqual(fake.call_count, 0)
         self.assertEqual(summary["faces_blurred"], 2)
 
@@ -376,12 +376,12 @@ class TestProcessVideoOcrSampling(unittest.TestCase):
         ) as detect_faces, mock.patch.object(
             video_pipeline.ocr_detector, "detect_text", return_value=[],
         ) as detect_text, mock.patch.object(
-            video_pipeline.redactor, "blur_region",
-        ) as blur:
+            video_pipeline.redactor, "redact_face",
+        ) as redact:
             summary = self._run(6, mode="blur", ocr_sample_rate=3)
         self.assertEqual(detect_faces.call_count, 6)  # face detect every frame
         self.assertEqual(detect_text.call_count, 2)   # OCR only on 0,3
-        self.assertEqual(blur.call_count, 6)          # 1 face blurred per frame
+        self.assertEqual(redact.call_count, 6)          # 1 face redacted per frame
         self.assertEqual(summary["faces_blurred"], 6)
 
     def test_zones_applied_every_frame_regardless_of_sampling(self):
@@ -518,7 +518,7 @@ class TestProcessVideoAudioMux(unittest.TestCase):
         # Blow up mid-processing (after the intermediate file is created) and
         # confirm the finally-block still removes it.
         with mock.patch.object(
-            video_pipeline.redactor, "blur_region",
+            video_pipeline.redactor, "redact_face",
             side_effect=RuntimeError("kaboom"),
         ):
             with mock.patch.object(

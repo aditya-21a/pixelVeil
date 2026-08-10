@@ -148,6 +148,9 @@ def process_video(
     progress_callback=None,
     preview_callback=None,
     inpaint_method="telea",
+    face_redaction_method="blur",
+    face_blur_intensity="medium",
+    face_pixelate_intensity="medium",
 ):
     """Process `input_path` frame by frame and write the redacted result to
     `output_path`.
@@ -336,9 +339,14 @@ def process_video(
 
                         persisted_pii.append((pii_type, value_bbox, replacement, style))
 
-            # 4. redact faces — always blurred, regardless of mode
+            # 4. redact faces — using the requested method and intensity
             for fbox in face_boxes:
-                redactor.blur_region(frame, fbox)
+                redactor.redact_face(
+                    frame, fbox, 
+                    method=face_redaction_method, 
+                    blur_intensity=face_blur_intensity, 
+                    pixelate_intensity=face_pixelate_intensity
+                )
             summary["faces_blurred"] += len(face_boxes)
 
             # 5. redact matched PII (fresh or persisted), per mode

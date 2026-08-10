@@ -21,6 +21,15 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 
 ## Open Issues
 
+### ISSUE-008 — Face mask geometry is an approximation and can misalign on extreme angles or occlusions
+- **Status:** Open (accepted v1 limitation)
+- **Severity:** Minor
+- **Affected files:** `core/redactor.py` (`_get_face_mask_and_box`)
+- **Description:** The face redaction mask is derived from the 2D bounding box provided by the face detector. To cover the forehead and chin, the box is expanded upwards and downwards by fixed proportions (40% up, 15% down), and an oval mask is drawn. This heuristic assumes a typical frontal or semi-frontal face. Extreme profiles, severe occlusion, or very small faces may result in a mask that is imperfectly aligned, potentially over-redacting the background or narrowly missing edge features.
+- **Reproduction:** Process a video with faces at extreme angles or partial occlusions.
+- **Workaround:** For missed regions, users can apply static zones over the exposed area.
+- **Notes:** Full 3D facial landmark tracking would be required for a perfectly conforming mask, which is out of scope for v1.
+
 ### ISSUE-007 — Fake-data replacement is a heuristic approximation, not a seamless/font-exact reproduction
 - **Status:** Open (accepted v1 limitation, by design)
 - **Severity:** Minor

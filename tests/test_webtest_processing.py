@@ -59,7 +59,8 @@ class _RecordingRunner:
     def __call__(self, input_path, output_path, mode="blur", zones=None,
                  ocr_sample_rate=1, face_min_confidence=None,
                  progress_callback=None, preview_callback=None,
-                 inpaint_method=None):
+                 inpaint_method=None, face_redaction_method="blur",
+                 face_blur_intensity="medium", face_pixelate_intensity="medium"):
         self.calls.append({
             "input_path": input_path,
             "output_path": output_path,
@@ -70,6 +71,9 @@ class _RecordingRunner:
             "progress_callback": progress_callback,
             "preview_callback": preview_callback,
             "inpaint_method": inpaint_method,
+            "face_redaction_method": face_redaction_method,
+            "face_blur_intensity": face_blur_intensity,
+            "face_pixelate_intensity": face_pixelate_intensity,
         })
         if self.gate is not None:
             self.gate.wait(5)

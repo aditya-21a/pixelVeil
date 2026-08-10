@@ -17,6 +17,12 @@ Internal, chronological, short. One entry per session/significant change. This i
 
 ## Log
 
+## 2026-08-10 — Face anonymization upgrade: adaptive oval mask, feathering, and method/intensity controls
+- Changed: core/redactor.py (`redact_face`, `_get_face_mask_and_box`), core/video_pipeline.py (`process_video` uses `redact_face`), tools/webtest/job.py (`ProcessingJob` kwargs), tools/webtest/server.py (routes kwargs), tools/webtest/settings_store.py (schema for method and intensities), tools/webtest/templates/settings.html (new UI controls), tools/webtest/static/js/app.js (UI logic), tests/test_redactor.py (new `TestRedactFace`), tests/test_video_pipeline.py (mock updates). docs/current-state.md, docs/TASKS.md, docs/DECISIONS.md (D26), docs/known-issues.md (ISSUE-008).
+- Why: User requested a more natural and private face redaction shape. The previous rectangular blur left foreheads and chins exposed and looked unnatural. Upgraded to an adaptive oval mask covering the full face, with feathered edges, and added configurable Blur/Pixelate methods and intensities (low/medium/high) that scale dynamically to face size.
+- Result: Face anonymization uses an expanded oval mask with a feathered Gaussian edge. New settings available in the web UI. All test suites updated and passing. New limitation ISSUE-008 documented. New decision D26 documented.
+- Commit: uncommitted
+
 ## 2026-08-06 — Processing screen UI dashboard layout & per-second technical log updates
 - Changed: tools/webtest/templates/processing.html (removed header text, layout restructured to Progress card top + 2-column dashboard grid), tools/webtest/templates/base.html (`screen-wide` class for processing page container), tools/webtest/static/css/style.css (`.screen.screen-wide`, `.processing-dashboard`, `.dashboard-grid`, `.log-card`, `.processing-done-banner`), tools/webtest/job.py (`self._last_log_time` added to log frame progress at least once per second `>= 1.0s` or frame 1/total), docs/current-state.md, docs/development-log.md
 - Why: User requested removing redundant Processing header text, expanding the narrow vertical column into a full-width, no-scroll dashboard layout utilizing screen space, and streaming log progress every second instead of every 30 frames.
