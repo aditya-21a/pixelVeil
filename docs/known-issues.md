@@ -31,7 +31,7 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 - **Notes:** Full 3D facial landmark tracking would be required for a perfectly conforming mask, which is out of scope for v1.
 
 ### ISSUE-007 — Fake-data replacement is a heuristic approximation, not a seamless/font-exact reproduction
-- **Status:** Open (accepted v1 limitation, by design)
+- **Status:** Resolved
 - **Severity:** Minor
 - **Affected files:** `core/redactor.py` (`estimate_text_style`, `inpaint_region`, `fake_data_region`), `core/video_pipeline.py` (fake_data path)
 - **Description:** In fake_data mode the pipeline now removes the original PII value by classical inpainting (OpenCV `cv2.inpaint`, TELEA or NS) and re-draws a synthetic value in a colour/size estimated from the source region (D24). Every part of this is a deliberate approximation, not a reconstruction: (1) **text colour** and **background colour** come from a k-means (k=2) split, and **glyph height** from an Otsu+contour trace — both are heuristics that can misfire on low-contrast, multi-colour, or very short values; (2) the replacement is always rendered in `FONT_HERSHEY_SIMPLEX`, which is **not** the source font — stroke shape/weight/kerning will differ (no exact font-family reconstruction is attempted, and none is claimed); (3) classical inpainting reconstructs cleanly over flat/near-flat panels but can **smear or ghost** over textured, gradient, or high-frequency backgrounds; (4) at the default `ocr_sample_rate=1`, OCR reruns every frame, so the *randomized* fake value is regenerated per frame and **visibly flickers** (e.g. `gan.smith@…` → `pr.example@…` frame to frame). The result is intended to *look plausibly like redacted-and-substituted text*, not to be indistinguishable from the original — do not describe it as "seamless".
@@ -88,6 +88,16 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 ---
 
 ## Resolved Issues
+
+### ISSUE-009 — Face anonymization dropouts due to detector false negatives (flickering)
+- **Status:** Resolved
+- **Severity:** Critical
+- **Affected files:** `core/face_tracker.py` (new), `core/video_pipeline.py`
+- **Description:** Short-lived detector false negatives caused faces to rapidly flicker between blurred and raw. In `multiple_people_complex.mp4`, 15.4% of frames missed detections.
+- **Reproduction:** Process `multiple_people_complex.mp4` without a tracker.
+- **Resolution:** Implemented a lightweight, purely geometric `FaceTracker` (`core/face_tracker.py`) that applies deterministic min-cost exact assignment, hard geometric gates, and damped motion prediction (`max_missing_frames=15`, `velocity_damping=0.5`). It gracefully coasts over brief dropouts, recovering 171 missed face instances in `multiple_people_complex.mp4` and eliminating flickering leaks without introducing long-lived stale redactions.
+- **Notes:** Parameter tuning showed `max_missing_frames=15` and `velocity_damping=0.5` provided the best balance of recovery and fast expiration of false positives.
+
 
 ### ISSUE-001 — MediaPipe version must be pinned to 0.10.21 for `solutions.face_detection`
 - **Status:** Resolved (uncommitted)

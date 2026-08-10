@@ -44,6 +44,7 @@ from core import face_detector
 from core import ocr_detector
 from core import pii_matcher
 from core import redactor
+from core.face_tracker import FaceTracker
 from core.zone_manager import ZoneManager
 from utils import fake_data
 
@@ -151,6 +152,9 @@ def process_video(
     face_redaction_method="blur",
     face_blur_intensity="medium",
     face_pixelate_intensity="medium",
+    tracker_max_missing_frames=15,
+    tracker_velocity_damping=0.8,
+    tracker_smoothing_alpha=1.0,
 ):
     """Process `input_path` frame by frame and write the redacted result to
     `output_path`.
@@ -247,7 +251,14 @@ def process_video(
         "faces_blurred": 0,
         "pii_by_type": {"EMAIL": 0, "PHONE": 0, "CARD": 0, "IP": 0},
         "zones_applied": 0,
+        "tracker_metrics": {},
     }
+
+    face_tracker = FaceTracker(
+        max_missing_frames=tracker_max_missing_frames,
+        velocity_damping=tracker_velocity_damping,
+        smoothing_alpha=tracker_smoothing_alpha
+    )
 
     writer = None
     intermediate_path = None
@@ -305,11 +316,14 @@ def process_video(
             # Forward a custom confidence only when supplied, so the detector's
             # own default is used otherwise (unchanged behavior).
             if face_min_confidence is None:
-                face_boxes = face_detector.detect_faces(frame)
+                raw_face_boxes = face_detector.detect_faces(frame)
             else:
-                face_boxes = face_detector.detect_faces(
+                raw_face_boxes = face_detector.detect_faces(
                     frame, min_confidence=face_min_confidence
                 )
+                
+            # Apply temporal tracking to coast over short detector dropouts
+            face_boxes = face_tracker.update(raw_face_boxes, frame.shape)
 
             # 2/3. text + classify — only on sampled frames (every Nth). Between
             # samples the previous detections in `persisted_pii` are reused.
@@ -403,6 +417,9 @@ def process_video(
         if writer is not None:
             writer.release()
             writer = None
+            
+        # Copy tracker metrics to summary
+        summary["tracker_metrics"] = face_tracker.metrics
 
         # Mux only if frames were actually written; an empty intermediate is
         # not a valid input for ffmpeg and yields no output.
