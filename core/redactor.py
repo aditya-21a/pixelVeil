@@ -309,7 +309,7 @@ def _get_face_mask_and_box(frame_shape, bbox):
     return (c_x_min, c_y_min, cw, ch), mask_roi
 
 
-def redact_face(frame, bbox, method="blur", blur_intensity="medium", pixelate_intensity="medium"):
+def redact_face(frame, bbox, method="blur", blur_intensity="medium"):
     """
     Apply a privacy-first, face-following redaction mask.
     
@@ -318,7 +318,6 @@ def redact_face(frame, bbox, method="blur", blur_intensity="medium", pixelate_in
         bbox: (x, y, w, h) original detector bounding box.
         method: "blur" or "pixelate".
         blur_intensity: "low", "medium", "high".
-        pixelate_intensity: "low", "medium", "high".
         
     Returns:
         The (same) frame, modified in place.
@@ -349,17 +348,26 @@ def redact_face(frame, bbox, method="blur", blur_intensity="medium", pixelate_in
         effect = cv2.GaussianBlur(roi, (k, k), 0)
         
     elif method == "pixelate":
-        w = int(bbox[2])
-        # Standard pixelation intensity uses a divisor of 17 (w // 17).
-        # This keeps the pixel blocks stable and dynamically scaled to the face size.
-        factor = max(2, w // 17)
+        # Adaptive pixelation grid:
+        # Smaller faces receive a coarse mosaic (fewer cells).
+        # Larger faces receive more cells, but strong anonymity is maintained.
+        # Cells scale sublinearly with expanded ROI width (rw).
+        cells_x = max(3, int(rw ** 0.35))
+        # Keep approximately square cells based on ROI aspect ratio
+        cells_y = max(3, int(cells_x * (rh / rw)))
 
-        down_w = max(1, rw // factor)
-        down_h = max(1, rh // factor)
+        down_w = min(rw, cells_x)
+        down_h = min(rh, cells_y)
+        
+        # Quantitative Diagnostics
+        pixels_per_cell = rw / max(1, down_w)
+        privacy_floor = "APPLIED" if int(rw ** 0.35) < 3 else "NOT_APPLIED"
+        print(f"diagnostic: face_width={int(bbox[2])} roi_width={rw} grid={down_w}x{down_h} pixels_per_cell={pixels_per_cell:.1f} privacy_floor={privacy_floor}")
 
-        small = cv2.resize(roi, (down_w, down_h), interpolation=cv2.INTER_LINEAR)
+        # INTER_AREA for downsampling (averaging pixels)
+        small = cv2.resize(roi, (down_w, down_h), interpolation=cv2.INTER_AREA)
+        # INTER_NEAREST for upsampling (blocky pixelation)
         effect = cv2.resize(small, (rw, rh), interpolation=cv2.INTER_NEAREST)
-
 
     else:
         effect = roi

@@ -274,8 +274,7 @@ def save_settings():
             face_min_confidence=data.get("face_min_confidence"),
             pii_patterns=data.get("pii_patterns"),
             face_redaction_method=data.get("face_redaction_method"),
-            face_blur_intensity=data.get("face_blur_intensity"),
-            face_pixelate_intensity=data.get("face_pixelate_intensity"),
+            face_blur_intensity=data.get("face_blur_intensity")
         )
     except ValueError as exc:
         return _err(400, str(exc))
@@ -292,7 +291,7 @@ def reset_settings():
 def set_face_redaction():
     """Save face redaction method and intensity from the Upload page.
 
-    Body: {face_redaction_method, face_blur_intensity, face_pixelate_intensity}.
+    Body: {face_redaction_method, face_blur_intensity}.
     All fields optional; unrecognised values are rejected with 400.
     Echoes back the full current settings so the UI can confirm the saved state.
     """
@@ -300,8 +299,7 @@ def set_face_redaction():
     try:
         new_settings = settings_store.update_settings(
             face_redaction_method=data.get("face_redaction_method"),
-            face_blur_intensity=data.get("face_blur_intensity"),
-            face_pixelate_intensity=data.get("face_pixelate_intensity"),
+            face_blur_intensity=data.get("face_blur_intensity")
         )
     except ValueError as exc:
         return _err(400, str(exc))
@@ -477,8 +475,7 @@ def process():
             ocr_sample_rate=proc_kwargs["ocr_sample_rate"],
             face_min_confidence=proc_kwargs["face_min_confidence"],
             face_redaction_method=proc_kwargs["face_redaction_method"],
-            face_blur_intensity=proc_kwargs["face_blur_intensity"],
-            face_pixelate_intensity=proc_kwargs["face_pixelate_intensity"],
+            face_blur_intensity=proc_kwargs["face_blur_intensity"]
         )
 
         if st["mode"] == "fake_data":

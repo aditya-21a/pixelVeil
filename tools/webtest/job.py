@@ -147,7 +147,7 @@ class ProcessingJob:
     def __init__(self, uid, input_path, output_path, mode, zones,
                  ocr_sample_rate=1, face_min_confidence=None, runner=None,
                  preview_every=_PREVIEW_EVERY, compare_methods=None,
-                 face_redaction_method="blur", face_blur_intensity="medium", face_pixelate_intensity="medium"):
+                 face_redaction_method="blur", face_blur_intensity="medium"):
         self.uid = uid
         self.input_path = input_path
         self.output_path = output_path
@@ -157,7 +157,6 @@ class ProcessingJob:
         self.face_min_confidence = face_min_confidence
         self.face_redaction_method = face_redaction_method
         self.face_blur_intensity = face_blur_intensity
-        self.face_pixelate_intensity = face_pixelate_intensity
         # Injectable for tests: defaults to the real pipeline entry point, so
         # web tests can substitute a fake and never run OCR.
         self._runner = runner or video_pipeline.process_video
@@ -216,6 +215,10 @@ class ProcessingJob:
         """Spawn the worker thread. Call once; use is_active() to guard restarts."""
         from core import device_manager
         from core import face_detector
+        
+        # Pre-initialize the compute device so diagnostics are accurate before the
+        # worker thread starts. (process_video will re-call this with 'auto').
+        face_detector.set_compute_device("auto")
         
         # Capture hardware state before starting
         dev_info = device_manager.get_device_info()
@@ -327,7 +330,6 @@ class ProcessingJob:
             preview_callback=self._on_preview,
             face_redaction_method=self.face_redaction_method,
             face_blur_intensity=self.face_blur_intensity,
-            face_pixelate_intensity=self.face_pixelate_intensity,
         )
         # Only forward inpaint_method when this pass specifies one, so the
         # blur/back-compat call to process_video() is unchanged.

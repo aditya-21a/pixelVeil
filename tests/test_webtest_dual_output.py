@@ -63,7 +63,7 @@ class _NsStartProbeRunner:
                  ocr_sample_rate=1, face_min_confidence=None,
                  progress_callback=None, preview_callback=None,
                  inpaint_method=None, face_redaction_method="blur",
-                 face_blur_intensity="medium", face_pixelate_intensity="medium"):
+                 face_blur_intensity="medium"):
         self.calls.append(inpaint_method)
         if inpaint_method == "ns" and self.job is not None:
             self.snapshot_at_ns_start = self.job.snapshot()
@@ -84,7 +84,7 @@ class _MethodFailRunner:
                  ocr_sample_rate=1, face_min_confidence=None,
                  progress_callback=None, preview_callback=None,
                  inpaint_method=None, face_redaction_method="blur",
-                 face_blur_intensity="medium", face_pixelate_intensity="medium"):
+                 face_blur_intensity="medium"):
         self.calls.append(inpaint_method)
         if inpaint_method == self.fail_on:
             raise RuntimeError("inpaint %s exploded" % inpaint_method)
@@ -103,7 +103,7 @@ class _PerMethodSummaryRunner:
                  ocr_sample_rate=1, face_min_confidence=None,
                  progress_callback=None, preview_callback=None,
                  inpaint_method=None, face_redaction_method="blur",
-                 face_blur_intensity="medium", face_pixelate_intensity="medium"):
+                 face_blur_intensity="medium"):
         self.calls.append(inpaint_method)
         return self.summaries[inpaint_method]
 

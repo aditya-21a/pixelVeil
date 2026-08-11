@@ -181,7 +181,7 @@ class TestRedactFace(unittest.TestCase):
         x, y, w, h = _mid_bbox()
         before = frame[y:y + h, x:x + w].copy()
         
-        redact_face(frame, (x, y, w, h), method="pixelate", pixelate_intensity="high")
+        redact_face(frame, (x, y, w, h), method="pixelate")
         
         after = frame[y:y + h, x:x + w]
         self.assertFalse(np.array_equal(before, after))
@@ -203,7 +203,7 @@ class TestRedactFace(unittest.TestCase):
         original = frame.copy()
         x, y, w, h = (150, 150, 60, 60)
         
-        redact_face(frame, (x, y, w, h), method="pixelate", pixelate_intensity="low")
+        redact_face(frame, (x, y, w, h), method="pixelate")
         
         # Check that pixels far outside are unchanged
         self.assertTrue(np.array_equal(frame[0:50, 0:50], original[0:50, 0:50]))

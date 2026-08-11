@@ -37,6 +37,7 @@ and on failure. A source with no audio still produces a valid video-only output.
 import os
 import subprocess
 import tempfile
+import time
 
 import cv2
 import imageio_ffmpeg
@@ -154,7 +155,6 @@ def process_video(
     inpaint_method="telea",
     face_redaction_method="blur",
     face_blur_intensity="medium",
-    face_pixelate_intensity="medium",
     tracker_max_missing_frames=15,
     tracker_velocity_damping=0.8,
     tracker_smoothing_alpha=1.0,
@@ -291,6 +291,19 @@ def process_video(
         "face_detector_provider": dev_info.get("face_detector_provider"),
         "ocr_provider": dev_info.get("ocr_provider"),
         "fallback_reason": dev_info.get("fallback_reason"),
+        "timing": {
+            "decode": 0.0,
+            "face_detect": 0.0,
+            "face_track": 0.0,
+            "ocr": 0.0,
+            "pii_match": 0.0,
+            "redact_faces": 0.0,
+            "redact_pii": 0.0,
+            "redact_zones": 0.0,
+            "encode": 0.0,
+            "audio_mux": 0.0,
+            "total_runtime": 0.0,
+        },
     }
 
     face_tracker = FaceTracker(
@@ -335,8 +348,12 @@ def process_video(
         persisted_pii = []
         frame_index = 0
 
+        t_total_start = time.perf_counter()
+
         while True:
+            t0 = time.perf_counter()
             ok, frame = cap.read()
+            summary["timing"]["decode"] += time.perf_counter() - t0
             if not ok:
                 break
 
@@ -354,20 +371,28 @@ def process_video(
             # 1. faces — detected on every frame (existing pipeline behavior).
             # Forward a custom confidence only when supplied, so the detector's
             # own default is used otherwise (unchanged behavior).
+            t0 = time.perf_counter()
             if face_min_confidence is None:
                 raw_face_boxes = face_detector.detect_faces(frame)
             else:
                 raw_face_boxes = face_detector.detect_faces(
                     frame, min_confidence=face_min_confidence
                 )
+            summary["timing"]["face_detect"] += time.perf_counter() - t0
                 
             # Apply temporal tracking to coast over short detector dropouts
+            t0 = time.perf_counter()
             face_boxes = face_tracker.update(raw_face_boxes, frame.shape)
+            summary["timing"]["face_track"] += time.perf_counter() - t0
 
             # 2/3. text + classify — only on sampled frames (every Nth). Between
             # samples the previous detections in `persisted_pii` are reused.
             if frame_index % ocr_sample_rate == 0:
+                t0 = time.perf_counter()
                 detections = ocr_detector.detect_text(frame)
+                summary["timing"]["ocr"] += time.perf_counter() - t0
+                
+                t0 = time.perf_counter()
                 persisted_pii = []
                 for text, bbox in detections:
                     # find_pii reports each PII value's type AND its character
@@ -391,18 +416,21 @@ def process_video(
                             replacement = None
 
                         persisted_pii.append((pii_type, value_bbox, replacement, style))
+                summary["timing"]["pii_match"] += time.perf_counter() - t0
 
             # 4. redact faces — using the requested method and intensity
+            t0 = time.perf_counter()
             for fbox in face_boxes:
                 redactor.redact_face(
                     frame, fbox, 
                     method=face_redaction_method, 
-                    blur_intensity=face_blur_intensity, 
-                    pixelate_intensity=face_pixelate_intensity
+                    blur_intensity=face_blur_intensity
                 )
+            summary["timing"]["redact_faces"] += time.perf_counter() - t0
             summary["faces_blurred"] += len(face_boxes)
 
             # 5. redact matched PII (fresh or persisted), per mode
+            t0 = time.perf_counter()
             for pii_type, bbox, replacement, style in persisted_pii:
                 if mode == "blur":
                     redactor.blur_region(frame, bbox)
@@ -412,13 +440,18 @@ def process_video(
                         inpaint_method=inpaint_method, style=style,
                     )
                 summary["pii_by_type"][pii_type] += 1
+            summary["timing"]["redact_pii"] += time.perf_counter() - t0
 
             # 6. static zones — every frame, via ZoneManager
+            t0 = time.perf_counter()
             zone_manager.apply_zones(frame, mode="blur")
+            summary["timing"]["redact_zones"] += time.perf_counter() - t0
             summary["zones_applied"] += len(zone_manager.get_zones())
 
             # 7. write frame
+            t0 = time.perf_counter()
             writer.write(frame)
+            summary["timing"]["encode"] += time.perf_counter() - t0
             summary["frames_processed"] += 1
             frame_index += 1
 
@@ -463,7 +496,11 @@ def process_video(
         # Mux only if frames were actually written; an empty intermediate is
         # not a valid input for ffmpeg and yields no output.
         if summary["frames_processed"] > 0:
+            t0 = time.perf_counter()
             _mux_audio(intermediate_path, input_path, output_path)
+            summary["timing"]["audio_mux"] = time.perf_counter() - t0
+            
+        summary["timing"]["total_runtime"] = time.perf_counter() - t_total_start
     finally:
         cap.release()
         if writer is not None:

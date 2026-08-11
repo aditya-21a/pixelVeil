@@ -222,3 +222,9 @@ Internal, chronological, short. One entry per session/significant change. This i
 - Added commercial evaluation warnings to the Upload and Settings screens.
 - Maintained MediaPipe fallback for missing model files.
 - Updated 	ests/test_face_detector.py with device routing edge-cases.
+
+## [2026-08-11] Single Adaptive Privacy Level
+- Refactored core/redactor.py pixelation method to use an adaptive grid scaling sublinearly with face size: cells = int(rw ** 0.35).
+- Ensures small/far faces receive high anonymity while large faces remain moderately pixelated but safe.
+- Removed ace_pixelate_intensity parameter across pipeline, webtest settings, jobs, UI, and test suite.
+- Created 	ests/test_pixelate_adaptive.py sweeping different face sizes and printing quantitative diagnostics.
