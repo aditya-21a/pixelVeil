@@ -207,3 +207,18 @@ Internal, chronological, short. One entry per session/significant change. This i
 - Also: pinned `mediapipe==0.10.*` (1.0.0 dropped `solutions`); added numpy + pytest to requirements.txt
 - Note: Detection path unrunnable in this sandbox (stub MediaPipe wheels, Tasks API only) â€” see ISSUE-001
 - Commit: uncommitted
+## 2026-08-11: GPU Acceleration and Face Detector Benchmarking
+- Implemented robust onnxruntime-gpu CUDA Execution Provider configuration in core/face_detector.py.
+- Fixed a known Windows CUDA deadlock by eagerly loading PyTorch DLLs at the module level prior to any ONNX initialization.
+- Created 	ools/download_scrfd.py to circumvent proxy/network issues and retrieve the SCRFD-500M ONNX model.
+- Ran 	ools/benchmark_face_detectors.py successfully. SCRFD drastically outperformed MediaPipe in accuracy (1724 vs 1146 faces found) and runs at 67 FPS on GPU (faster than MediaPipe CPU).
+- Logged ISSUE-010 for YuNet fallback bug discovered during benchmarking.
+
+
+## 2026-08-11: Webtest Compute Diagnostics & SCRFD Local Default
+- Made SCRFD the active default face detector for local evaluation, mapping uto requests to SCRFD CUDA or SCRFD CPU.
+- Implemented diagnostics state in ProcessingJob to capture hardware and backend details from device_manager.
+- Updated the Webtest UI (	emplates/processing.html, static/js/app.js) to display a live Compute diagnostics panel and pipeline stage sub-labels (e.g. SCRFD · CUDA).
+- Added commercial evaluation warnings to the Upload and Settings screens.
+- Maintained MediaPipe fallback for missing model files.
+- Updated 	ests/test_face_detector.py with device routing edge-cases.

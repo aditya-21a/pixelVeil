@@ -351,3 +351,52 @@ h2 { font-size: 15px; margin: 0 0 12px; }
   cursor: pointer;
 }
 .intensity-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* --- Compute Diagnostics --- */
+.compute-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.compute-item {
+  display: flex;
+  flex-direction: column;
+}
+.compute-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+.compute-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+.status-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #E5E7EB;
+  font-size: 12px;
+}
+.status-badge.gpu {
+  background: #D1FAE5;
+  color: #065F46;
+}
+.status-badge.cpu {
+  background: #FEF3C7;
+  color: #92400E;
+}
+.error-text {
+  color: #DC2626;
+}
+
+/* --- Pipeline Sub-labels --- */
+.stage-name {
+  font-weight: 500;
+}
+.stage-sub {
+  font-size: 12px;
+  color: var(--muted);
+}

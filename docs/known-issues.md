@@ -21,6 +21,15 @@ Every issue gets an ID (`ISSUE-001`, `ISSUE-002`, ...) so it can be referenced p
 
 ## Open Issues
 
+### ISSUE-010 — YuNet face detection returns 0 faces in benchmark runner
+- **Status:** Open
+- **Severity:** Minor
+- **Affected files:** `core/face_detector.py`
+- **Description:** After refactoring the ORT device initialization logic, the YuNet ONNX model (2023 variant) fails to detect any faces during the `benchmark_face_detectors.py` run (detects 0 faces across all videos). This is likely due to pre-processing differences (BGR/RGB or NCHW layout expectations) compared to what the newer code provides.
+- **Reproduction:** Run `python benchmark_face_detectors.py`.
+- **Workaround:** None.
+- **Notes:** YuNet has been thoroughly outperformed by SCRFD in local evaluations, so fixing the YuNet fallback path is de-prioritized.
+
 ### ISSUE-008 — Face mask geometry is an approximation and can misalign on extreme angles or occlusions
 - **Status:** Open (accepted v1 limitation)
 - **Severity:** Minor

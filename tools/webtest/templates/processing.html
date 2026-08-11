@@ -22,17 +22,97 @@
 
   <div class="dashboard-grid">
     <div class="dashboard-col left-col">
+      <section class="card diagnostics-card" id="computeCard">
+        <h2>Compute</h2>
+        <div class="compute-grid">
+          <div class="compute-item">
+            <div class="compute-label">GPU</div>
+            <div class="compute-value" id="diagGpu">Detecting...</div>
+          </div>
+          <div class="compute-item">
+            <div class="compute-label">Face Detection</div>
+            <div class="compute-value" id="diagFace">—</div>
+          </div>
+          <div class="compute-item">
+            <div class="compute-label">OCR</div>
+            <div class="compute-value" id="diagOcr">—</div>
+          </div>
+          <div class="compute-item">
+            <div class="compute-label">Face Tracking</div>
+            <div class="compute-value" id="diagTracker">—</div>
+          </div>
+          <div class="compute-item">
+            <div class="compute-label">Redaction</div>
+            <div class="compute-value" id="diagRedactor">—</div>
+          </div>
+          <div class="compute-item">
+            <div class="compute-label">Video Encoding</div>
+            <div class="compute-value" id="diagEncoder">—</div>
+          </div>
+          <div class="compute-item overall-status">
+            <div class="compute-label">Overall</div>
+            <div class="compute-value status-badge" id="diagOverall">—</div>
+          </div>
+          <div class="compute-item error-text" id="diagFallbackBox" style="display: none; grid-column: 1 / -1;">
+            <div class="compute-label">Fallback Reason</div>
+            <div class="compute-value" id="diagFallback">—</div>
+          </div>
+        </div>
+      </section>
+
       <section class="card stages-card">
         <h2>Pipeline stages</h2>
         <table class="stages">
           <thead><tr><th>Stage</th><th>State</th><th>Detail</th></tr></thead>
           <tbody id="stageRows">
-            <tr><td>face_detector</td><td class="state idle">idle</td><td>—</td></tr>
-            <tr><td>ocr_detector</td><td class="state idle">idle</td><td>—</td></tr>
-            <tr><td>pii_matcher</td><td class="state idle">idle</td><td>—</td></tr>
-            <tr><td>zone_manager</td><td class="state idle">idle</td><td>—</td></tr>
-            <tr><td>redactor</td><td class="state idle">idle</td><td>—</td></tr>
-            <tr><td>video writer / ffmpeg mux</td><td class="state idle">idle</td><td>—</td></tr>
+            <tr>
+              <td>
+                <div class="stage-name">Video Input</div>
+                <div class="stage-sub" id="stageSubInput"></div>
+              </td>
+              <td class="state idle" id="state_input">idle</td>
+              <td id="detail_input">—</td>
+            </tr>
+            <tr>
+              <td>
+                <div class="stage-name">Face Detection</div>
+                <div class="stage-sub" id="stageSubFace"></div>
+              </td>
+              <td class="state idle" id="state_face_detector">idle</td>
+              <td id="detail_face_detector">—</td>
+            </tr>
+            <tr>
+              <td>
+                <div class="stage-name">Face Tracking</div>
+                <div class="stage-sub" id="stageSubTracker"></div>
+              </td>
+              <td class="state idle" id="state_tracker">idle</td>
+              <td id="detail_tracker">—</td>
+            </tr>
+            <tr>
+              <td>
+                <div class="stage-name">OCR / PII</div>
+                <div class="stage-sub" id="stageSubOcr"></div>
+              </td>
+              <td class="state idle" id="state_ocr_detector">idle</td>
+              <td id="detail_ocr_detector">—</td>
+            </tr>
+            <tr>
+              <td>
+                <div class="stage-name">Face Redaction</div>
+                <div class="stage-sub" id="stageSubRedactor"></div>
+              </td>
+              <td class="state idle" id="state_redactor">idle</td>
+              <td id="detail_redactor">—</td>
+            </tr>
+            <tr>
+              <td>
+                <div class="stage-name">Video Encoding</div>
+                <div class="stage-sub" id="stageSubEncoder"></div>
+              </td>
+              <td class="state idle" id="state_encoder">idle</td>
+              <td id="detail_encoder">—</td>
+            </tr>
           </tbody>
         </table>
       </section>

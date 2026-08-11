@@ -204,6 +204,7 @@ class ProcessingJob:
         self.error = None         # controlled error message, on failure
         self.log = []             # list of technical log line strings
         self._last_log_time = 0.0  # timestamp of the last logged frame progress entry
+        self.diagnostics = None   # hardware/backend diagnostics populated on start
 
         # Latest diagnostic preview only — never a growing buffer of frames.
         self._preview_jpeg = None      # bytes of the most recent preview image
@@ -213,6 +214,27 @@ class ProcessingJob:
     # -- lifecycle ------------------------------------------------------------
     def start(self):
         """Spawn the worker thread. Call once; use is_active() to guard restarts."""
+        from core import device_manager
+        from core import face_detector
+        
+        # Capture hardware state before starting
+        dev_info = device_manager.get_device_info()
+        self.diagnostics = {
+            "compute_device": dev_info.get("device"),
+            "gpu_name": dev_info.get("gpu_name"),
+            "face_detector": {
+                "model": face_detector.get_active_model_name(),
+                "provider": face_detector.get_active_provider(),
+            },
+            "ocr": {
+                "provider": dev_info.get("ocr_provider", "CPUExecutionProvider")
+            },
+            "tracker": {"device": dev_info.get("tracker", "CPU")},
+            "redactor": {"device": dev_info.get("redactor", "CPU")},
+            "encoder": {"device": dev_info.get("encoder", "CPU")},
+            "fallback_reason": dev_info.get("fallback_reason")
+        }
+
         self._started_at = _clock()
         self.status = RUNNING
         self._append_log("job started — mode=%s, zones=%d" % (self.mode, len(self.zones)))
@@ -503,6 +525,7 @@ class ProcessingJob:
                 "summaries": dict(self.summaries),
                 "summary_discrepancy": self.summary_discrepancy,
                 "failed_method": self.failed_method,
+                "diagnostics": self.diagnostics,
                 # Lightweight preview signaling only — the image itself is served
                 # by a dedicated endpoint, never embedded in this poll (D21).
                 "has_preview": self._preview_jpeg is not None,

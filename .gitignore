@@ -13,3 +13,7 @@ outputs/
 tools/webtest/uploads/
 tools/webtest/outputs/
 *.log
+
+# Exclude local evaluation models
+assets/models/det_*.onnx
+assets/models/*.zip

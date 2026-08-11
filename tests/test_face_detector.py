@@ -254,3 +254,48 @@ class TestFaceDetectorAngledFace(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestComputeDeviceRouting(unittest.TestCase):
+    """Test the device resolution logic introduced for SCRFD local evaluation."""
+    
+    @unittest.mock.patch('core.device_manager.get_compute_device')
+    @unittest.mock.patch('os.path.isfile')
+    def test_auto_cuda_resolves_to_scrfd_cuda(self, mock_isfile, mock_get_compute):
+        mock_isfile.return_value = True
+        mock_get_compute.return_value = 'cuda'
+        
+        from core import face_detector as fd
+        fd.set_compute_device('auto')
+        self.assertEqual(fd.get_active_backend(), 'scrfd')
+        self.assertEqual(fd.get_active_provider(), 'CUDAExecutionProvider')
+
+    @unittest.mock.patch('core.device_manager.get_compute_device')
+    @unittest.mock.patch('os.path.isfile')
+    def test_auto_cpu_resolves_to_scrfd_cpu(self, mock_isfile, mock_get_compute):
+        mock_isfile.return_value = True
+        mock_get_compute.return_value = 'cpu'
+        
+        from core import face_detector as fd
+        fd.set_compute_device('auto')
+        self.assertEqual(fd.get_active_backend(), 'scrfd')
+        self.assertEqual(fd.get_active_provider(), 'CPUExecutionProvider')
+
+    @unittest.mock.patch('core.device_manager.get_compute_device')
+    @unittest.mock.patch('os.path.isfile')
+    def test_explicit_cuda_fails_fast_if_unavailable(self, mock_isfile, mock_get_compute):
+        mock_get_compute.side_effect = RuntimeError("CUDA unavailable")
+        
+        from core import face_detector as fd
+        with self.assertRaises(RuntimeError):
+            fd.set_compute_device('cuda')
+
+    @unittest.mock.patch('core.device_manager.get_compute_device')
+    @unittest.mock.patch('os.path.isfile')
+    def test_scrfd_missing_falls_back_to_mediapipe(self, mock_isfile, mock_get_compute):
+        mock_isfile.return_value = False  # model missing
+        mock_get_compute.return_value = 'cpu'
+        
+        from core import face_detector as fd
+        fd.set_compute_device('cpu')
+        self.assertEqual(fd.get_active_backend(), 'mediapipe')
+        self.assertEqual(fd.get_active_provider(), 'MediaPipe')

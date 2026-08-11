@@ -9,6 +9,7 @@ final output rather than OpenCV's VideoWriter alone.
 Public API:
     process_video(input_path, output_path, mode="blur", zones=None,
                   ocr_sample_rate=1, face_min_confidence=None,
+                  compute_device="auto",
                   progress_callback=None, preview_callback=None) -> dict
 
 This module is orchestration only: it reads frames, calls each component's
@@ -44,6 +45,7 @@ from core import face_detector
 from core import ocr_detector
 from core import pii_matcher
 from core import redactor
+from core import device_manager
 from core.face_tracker import FaceTracker
 from core.zone_manager import ZoneManager
 from utils import fake_data
@@ -146,6 +148,7 @@ def process_video(
     zones=None,
     ocr_sample_rate=1,
     face_min_confidence=None,
+    compute_device="auto",
     progress_callback=None,
     preview_callback=None,
     inpaint_method="telea",
@@ -209,15 +212,27 @@ def process_video(
             (Navier-Stokes). Both are classical lightweight OpenCV algorithms.
             Invalid method names raise ValueError. Ignored when mode is "blur".
 
+        compute_device: "auto", "cpu", or "cuda". Controls which device the
+            face detector uses. "auto" uses CUDA when a validated CUDA path
+            is available (device_manager.is_cuda_available()), otherwise CPU.
+            "cuda" requires CUDA and raises RuntimeError if unavailable.
+            "cpu" always uses CPU (MediaPipe backend).
+            OCR always runs on CPU regardless of this setting — benchmarks
+            (2026-08-11) showed CPU is 1.83x faster than CUDA for RapidOCR on
+            the GTX 1650 workload (see docs/DECISIONS.md D27).
+
     Returns:
         A summary dict: frames_processed, faces_blurred, pii_by_type (counts
         per PII type, counted per frame a region is redacted — persisted
-        regions count on each frame they apply), zones_applied.
+        regions count on each frame they apply), zones_applied, plus device
+        diagnostics (device, gpu_name, vram_mb, face_detector_provider,
+        ocr_provider, fallback_reason).
 
     Raises:
         ValueError: if `mode` is invalid, `ocr_sample_rate` is not a positive
             integer, or the input video cannot be opened.
-        RuntimeError: if the ffmpeg audio-mux step fails.
+        RuntimeError: if `compute_device` is "cuda" and CUDA is unavailable,
+            or if the ffmpeg audio-mux step fails.
     """
     if mode not in ("blur", "fake_data"):
         raise ValueError(f"mode must be 'blur' or 'fake_data', got {mode!r}")
@@ -237,6 +252,23 @@ def process_video(
                 f"got {face_min_confidence!r}"
             )
 
+    # Resolve compute device BEFORE opening the video so a bad device request
+    # (e.g. compute_device='cuda' on a CPU-only machine) raises immediately.
+    # device_manager.get_compute_device() either returns 'cpu'/'cuda' or raises
+    # RuntimeError when 'cuda' is explicitly requested but unavailable.
+    resolved_device = device_manager.get_compute_device(compute_device)
+
+    # Configure the face detector backend for this run. This is called once per
+    # process_video() invocation rather than per-frame — the detector caches its
+    # ORT session internally and reuses it across frames.
+    face_detector.set_compute_device(resolved_device)
+
+    # Collect device diagnostics for the summary dict.
+    dev_info = device_manager.get_device_info()
+    # OCR always uses CPU (see param docstring above).
+    dev_info["ocr_provider"] = "CPUExecutionProvider"
+    dev_info["face_detector_provider"] = face_detector.get_active_provider()
+
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         cap.release()
@@ -252,6 +284,13 @@ def process_video(
         "pii_by_type": {"EMAIL": 0, "PHONE": 0, "CARD": 0, "IP": 0},
         "zones_applied": 0,
         "tracker_metrics": {},
+        # Device diagnostics — what actually ran, not what was requested.
+        "device": dev_info.get("device", resolved_device),
+        "gpu_name": dev_info.get("gpu_name"),
+        "vram_mb": dev_info.get("vram_mb"),
+        "face_detector_provider": dev_info.get("face_detector_provider"),
+        "ocr_provider": dev_info.get("ocr_provider"),
+        "fallback_reason": dev_info.get("fallback_reason"),
     }
 
     face_tracker = FaceTracker(

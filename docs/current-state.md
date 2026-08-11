@@ -52,10 +52,11 @@ Last updated: 2026-08-06
 *(Mirror the high-level summary here; full detail lives in known-issues.md. Keep this list short — just enough to orient a new session.)*
 
 - MediaPipe is pinned to `mediapipe==0.10.21` in `requirements.txt` because 1.0.0 (and 0.10.35 here) removed the legacy `solutions.face_detection` API that `core/face_detector.py` uses per D5. See ISSUE-001 (resolved).
-- **Face Detection and Tracking**: 
-    -   Uses MediaPipe (`core/face_detector.py`) for raw bounding box detection on every frame.
-    -   Passes detections through `FaceTracker` (`core/face_tracker.py`), which uses a deterministic exact-match assignment and hard gates to maintain temporal consistency.
-    -   `FaceTracker` predicts face locations during short detector dropouts (up to `max_missing_frames=15` with `velocity_damping=0.5`) to prevent flickering and privacy leaks, while expiring impossible tracks to prevent stale redactions.
+- **Face Detection:** Multi-backend architecture (`core/face_detector.py`) supporting local evaluation of SCRFD-500M and YuNet via ONNX Runtime (`CUDAExecutionProvider` or `CPUExecutionProvider`), falling back to Google MediaPipe (BlazeFace CPU). SCRFD-500M is the most accurate and runs at 67 FPS on a GTX 1650.
+  - CUDA initialization is protected against deadlocks by eager PyTorch DLL loading on module import.
+  - *Note: SCRFD weights are currently for local evaluation only and must not be distributed without a commercial license.*
+- **Face Tracking:** Detections pass through `FaceTracker` (`core/face_tracker.py`), which uses a deterministic exact-match assignment and hard gates to maintain temporal consistency.
+  - `FaceTracker` predicts face locations during short detector dropouts (up to `max_missing_frames=15` with `velocity_damping=0.5`) to prevent flickering and privacy leaks, while expiring impossible tracks to prevent stale redactions.
 - Angled/partial faces may be missed by the face detector (observed: 0 detected on `tests/assets/angled_face.jpg`). Accepted v1 limitation per TESTING.md 3.1 — see ISSUE-002.
 - With OCR frame-sampling (`ocr_sample_rate > 1`), PII that moves/scrolls or appears-and-vanishes between samples can be missed or lag its box — accepted v1 tradeoff per TESTING.md 3.2, see ISSUE-003. Lower the sample rate (→ `1`) to trade speed for coverage; faces and static zones are unaffected (every frame).
 - The Results **Original** preview serves the uploaded file as-is, so it renders in-browser only for browser-supported source codecs; mp4v sample fixtures (`tests/sample_videos/*.mp4`) show controls-but-blank in HTML5 `<video>` though they download/play externally. The **processed** output is always browser-playable H.264. Accepted v1 limitation — see ISSUE-005.

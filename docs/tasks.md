@@ -131,12 +131,20 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Validated: `tests/test_fake_data_quality.py` (new, **26 passed**), `tests/test_redactor.py` (**14 passed**), `tests/test_fake_data.py` (**11 passed**), `tests/test_video_pipeline.py` incl. new `TestFakeDataStylePersistence` (**50 passed**). Full `python -m pytest tests/test_*.py` → **262 passed, 100 subtests** (was 234; +28), no regressions. Also fixed a missing `import shutil` in `tests/test_video_pipeline.py` (used by the new tearDown).
 
 - [x] Test-harness dual-output — process fake_data twice (TELEA + NS) for manual comparison (D25)
-  - **Harness-only, temporary, no winner chosen.** In `tools/webtest`, a **fake_data** job now runs `core.video_pipeline.process_video()` **twice** — once `inpaint_method="telea"`, once `"ns"` — so a developer can eyeball both classical-inpainting fills on any uploaded clip. **Blur is untouched (runs once).** No core/redaction/inpainting/detection logic changed; the harness just calls the existing public API twice with a different `inpaint_method` (signature unmodified). See DECISIONS.md **D25**.
-  - `tools/webtest/job.py`: `ProcessingJob` gained an optional `compare_methods` list (`[(label, inpaint_method, output_path)]`); present → sequential multi-pass, absent → single pass exactly as before (back-compat). Presents the two runs as ONE job: `_percent_locked()` spans passes (`(pass_index + frame/total)/num_passes` → TELEA 0–50%, NS 50–100%), COMPLETE only after **both**, per-pass counter reset (no double-count), `summaries{}`+canonical `summary`, `_check_summary_discrepancy()` flags (not hides) differing detection counts, `failed_method` + method-labelled error on either-pass failure (single-pass re-raises unchanged). snapshot adds `num_passes`/`pass_index`/`pass_label`/`summaries`/`summary_discrepancy`/`failed_method`.
-  - `tools/webtest/server.py`: fake_data `/process` builds `output_paths={telea,ns}` (`<stem>_telea.mp4`/`<stem>_ns.mp4` via `_method_output_path`) and a `compare_methods` list; stores `output_paths` in server-owned `_STATE` (drops single `output_path`). New id-keyed routes (D22 security model — paths only from `_STATE`, method allowlist): `GET /video/<uid>/telea|ns`, `GET /download/<uid>/telea|ns|both`; "Download Both" is an in-memory **stdlib `zipfile`** ZIP of exactly the two outputs (no new dep). Unknown id / incomplete / missing file / wrong-mode → controlled 404/409.
-  - `templates/results.html` + `static/css/style.css` + `static/js/app.js`: fake_data Results is **Original + TELEA + NS** (3-up, all playable, labeled) with per-method Download TELEA/NS + Download Both (ZIP); summary shown **once** + discrepancy surfaced if any; blur keeps **Original + Redacted** (2-up, single download). JS progress shows the current pass (`TELEA (pass 1/2)`) and still keys completion strictly off `status === "complete"` (never done after only TELEA).
-  - Validated: `tests/test_webtest_dual_output.py` (new, **29 passed** — job-level dual pass, distinct outputs, both summaries retained, not-complete-after-telea/percent==50, either-method failure → controlled error, discrepancy flagged, blur once; Flask: 3-up Results, summary-once, per-method video/download routes serve correct bytes, ZIP contains exactly both, blur unchanged + no per-method routes, unknown/incomplete/missing → 404/409, navigation persistence, post-completion mode-toggle robustness). `tests/test_webtest_processing.py` forwarding test switched to `mode="blur"` (the genuine single-run mode) so it still asserts the one-call contract without weakening. Focused webtest suites → **85 passed**; full `python -m pytest tests/test_*.py` → **291 passed, 100 subtests**, no regressions.
-  - **Bug Fix (2026-08-06):** Fixed route path resolution in `tools/webtest/server.py` (`results()`, `_results_fake_data()`, `_results_blur()`, `video_processed()`, `download_output()`, `_serve_fake_output()`, `download_both()`) by using `job.mode` and falling back to `job.output_paths` / `job.output_path` so Results and download endpoints remain functional even if `_STATE` UI mode is toggled post-completion. Verified by new regression test `test_results_robust_to_ui_mode_change` in `tests/test_webtest_dual_output.py`.
+
+### 4. GPU Acceleration (Production-Ready)
+- [x] Determine safe method to discover CUDA on Windows without crashing ORT.
+- [x] Configure ORT `InferenceSession` for `CUDAExecutionProvider` with `CPUExecutionProvider` fallback.
+- [x] Implement robust PyTorch CUDA DLL loading module-level configuration to prevent deadlocks.
+- [x] Implement graceful fallback logic if CUDA fails at runtime.
+- [x] Verify actual GPU inference speedup against CPU.
+
+### 5. Local SCRFD Evaluation (Research Only)
+- [x] Ensure we NEVER package or distribute InsightFace weights.
+- [x] Implement local script to download SCRFD-500M safely (`tools/download_scrfd.py`).
+- [x] Integrate SCRFD-500M backend into `face_detector.py`.
+- [x] Run comprehensive latency and recall benchmarks (`tools/benchmark_face_detectors.py`).
+- [x] Compare MediaPipe, YuNet, and SCRFD metrics and document findings.
 
 ## Phase 4 — Packaging (Windows .exe)
 - [ ] Set up PyInstaller build config

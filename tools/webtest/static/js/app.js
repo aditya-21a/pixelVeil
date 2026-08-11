@@ -353,22 +353,83 @@
     logPinnedToBottom = atBottom;
   });
 
-  function renderStages(stages) {
+  function renderStages(snap) {
+    var stages = snap.stages;
     stageRows.innerHTML = "";
     stages.forEach(function (s) {
       var tr = document.createElement("tr");
+      
       var name = document.createElement("td");
-      name.textContent = s.name;
+      var nameDiv = document.createElement("div");
+      nameDiv.className = "stage-name";
+      nameDiv.textContent = s.name;
+      name.appendChild(nameDiv);
+      
+      // Inject hardware sub-labels if available
+      if (snap.diagnostics) {
+        var subText = "";
+        var nameLower = s.name.toLowerCase();
+        if (nameLower.indexOf("face detection") !== -1) {
+            subText = snap.diagnostics.face_detector.model + " · " + (snap.diagnostics.face_detector.provider.indexOf("CUDA") !== -1 ? "CUDA" : "CPU");
+        } else if (nameLower.indexOf("tracking") !== -1) {
+            subText = snap.diagnostics.tracker.device + " · geometric";
+        } else if (nameLower.indexOf("ocr") !== -1) {
+            subText = "RapidOCR · " + (snap.diagnostics.ocr.provider.indexOf("CUDA") !== -1 ? "CUDA" : "CPU");
+        } else if (nameLower.indexOf("redact") !== -1) {
+            subText = snap.diagnostics.redactor.device;
+        } else if (nameLower.indexOf("video") !== -1) {
+            subText = snap.diagnostics.encoder.device;
+        }
+        if (subText) {
+            var subDiv = document.createElement("div");
+            subDiv.className = "stage-sub";
+            subDiv.textContent = subText;
+            name.appendChild(subDiv);
+        }
+      }
+
       var state = document.createElement("td");
       state.className = "state " + s.state;
       state.textContent = s.state;
       var detail = document.createElement("td");
       detail.textContent = s.detail;
+      
       tr.appendChild(name);
       tr.appendChild(state);
       tr.appendChild(detail);
       stageRows.appendChild(tr);
     });
+  }
+
+  function renderDiagnostics(diag) {
+    if (!diag) return;
+    document.getElementById("diagGpu").textContent = diag.gpu_name || "Unavailable";
+    
+    var fd_prov = diag.face_detector.provider.indexOf("CUDA") !== -1 ? "CUDA" : "CPU";
+    document.getElementById("diagFace").textContent = diag.face_detector.model + " · " + fd_prov;
+    
+    var ocr_prov = diag.ocr.provider.indexOf("CUDA") !== -1 ? "CUDA" : "CPU";
+    document.getElementById("diagOcr").textContent = "RapidOCR · " + ocr_prov;
+    
+    document.getElementById("diagTracker").textContent = diag.tracker.device;
+    document.getElementById("diagRedactor").textContent = diag.redactor.device;
+    document.getElementById("diagEncoder").textContent = diag.encoder.device;
+    
+    var overall = document.getElementById("diagOverall");
+    if (diag.fallback_reason) {
+        overall.textContent = "CPU Fallback";
+        overall.className = "compute-value status-badge cpu";
+        document.getElementById("diagFallbackBox").style.display = "block";
+        document.getElementById("diagFallback").textContent = diag.fallback_reason;
+    } else if (diag.compute_device === "cuda") {
+        overall.textContent = "GPU Accelerated";
+        overall.className = "compute-value status-badge gpu";
+        document.getElementById("diagFallbackBox").style.display = "none";
+    } else {
+        overall.textContent = "CPU Only";
+        overall.className = "compute-value status-badge cpu";
+        document.getElementById("diagFallbackBox").style.display = "none";
+    }
   }
 
   function render(snap) {
@@ -386,7 +447,8 @@
       " · " + snap.percent + "% · elapsed " + snap.elapsed + "s · " + snap.status +
       passInfo;
 
-    renderStages(snap.stages);
+    renderDiagnostics(snap.diagnostics);
+    renderStages(snap);
 
     logPanel.textContent = (snap.log && snap.log.length)
       ? snap.log.join("\n")

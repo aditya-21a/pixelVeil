@@ -5,7 +5,21 @@ opencv-python
 mediapipe==0.10.21
 numpy
 rapidocr
-onnxruntime
+# GPU-enabled ORT. On machines without an NVIDIA GPU, onnxruntime-gpu still
+# functions — it falls back to CPUExecutionProvider automatically. Do NOT also
+# install plain `onnxruntime`: having both packages installed causes an import
+# conflict. If you need a CPU-only install, replace this with `onnxruntime`
+# (no version suffix), but do NOT install both simultaneously.
+onnxruntime-gpu==1.20.2
+# PyTorch (CUDA 12.1 build). Required for two reasons:
+#   1. core/device_manager.py resolves the PyTorch lib/ directory to add CUDA
+#      DLLs via os.add_dll_directory() before ORT creates a CUDA session.
+#   2. GPU diagnostics (torch.cuda.get_device_properties) report VRAM.
+# Install the CUDA build from https://pytorch.org — the default `pip install
+# torch` gives the CPU-only build which defeats both purposes above.
+# On a CPU-only machine, `torch` (CPU) still satisfies the import; CUDA paths
+# are automatically skipped by device_manager.is_cuda_available().
+torch>=2.5.1
 pillow
 imageio-ffmpeg
 

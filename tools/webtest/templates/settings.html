@@ -27,6 +27,9 @@
 
   <section class="card">
     <h2>Face detection confidence</h2>
+    <p class="muted" style="margin-bottom: 12px; color: #b45309;">
+      <strong>Active Detector: SCRFD</strong> · Currently enabled for local evaluation only. Commercial deployment requires the appropriate model license.
+    </p>
     <label class="field">Threshold
       <input type="range" id="faceConf" min="0" max="1" step="0.05"
              value="{{ settings.face_min_confidence }}">

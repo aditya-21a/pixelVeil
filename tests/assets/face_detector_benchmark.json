@@ -1,0 +1,646 @@
+{
+  "device_info": {
+    "device": "cuda",
+    "gpu_name": "NVIDIA GeForce GTX 1650",
+    "vram_mb": 4095,
+    "cuda_version": "12.1",
+    "ort_version": "1.20.2",
+    "torch_version": "2.5.1+cu121",
+    "face_detector_provider": "CUDAExecutionProvider",
+    "ocr_provider": "CUDAExecutionProvider",
+    "redactor": "CPU",
+    "tracker": "CPU",
+    "encoder": "CPU",
+    "fallback_reason": null
+  },
+  "video_results": {
+    "multiple_people.mp4": {
+      "total_frames": 240,
+      "fps_original": 24.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 12.01,
+          "fps": 83.3,
+          "raw_faces_detected": 261,
+          "raw_frames_with_faces": 208,
+          "raw_missed_frames": 32,
+          "longest_miss_run": 11,
+          "tracker_faces_detected": 421,
+          "tracker_frames_with_faces": 240,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 30.33,
+          "fps": 33.0,
+          "raw_faces_detected": 524,
+          "raw_frames_with_faces": 236,
+          "raw_missed_frames": 4,
+          "longest_miss_run": 4,
+          "tracker_faces_detected": 816,
+          "tracker_frames_with_faces": 240,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 15.14,
+          "fps": 66.1,
+          "raw_faces_detected": 524,
+          "raw_frames_with_faces": 236,
+          "raw_missed_frames": 4,
+          "longest_miss_run": 4,
+          "tracker_faces_detected": 816,
+          "tracker_frames_with_faces": 240,
+          "tracker_unprotected_frames": 0
+        }
+      ]
+    },
+    "multiple_people_complex.mp4": {
+      "total_frames": 240,
+      "fps_original": 24.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 12.11,
+          "fps": 82.6,
+          "raw_faces_detected": 225,
+          "raw_frames_with_faces": 203,
+          "raw_missed_frames": 37,
+          "longest_miss_run": 13,
+          "tracker_faces_detected": 404,
+          "tracker_frames_with_faces": 223,
+          "tracker_unprotected_frames": 17
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 31.93,
+          "fps": 31.3,
+          "raw_faces_detected": 540,
+          "raw_frames_with_faces": 232,
+          "raw_missed_frames": 8,
+          "longest_miss_run": 8,
+          "tracker_faces_detected": 853,
+          "tracker_frames_with_faces": 240,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 14.13,
+          "fps": 70.8,
+          "raw_faces_detected": 540,
+          "raw_frames_with_faces": 232,
+          "raw_missed_frames": 8,
+          "longest_miss_run": 8,
+          "tracker_faces_detected": 853,
+          "tracker_frames_with_faces": 240,
+          "tracker_unprotected_frames": 0
+        }
+      ]
+    },
+    "single_person_face_motion.mp4": {
+      "total_frames": 240,
+      "fps_original": 24.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 12.05,
+          "fps": 83.0,
+          "raw_faces_detected": 240,
+          "raw_frames_with_faces": 240,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 255,
+          "tracker_frames_with_faces": 240,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 32.16,
+          "fps": 31.1,
+          "raw_faces_detected": 240,
+          "raw_frames_with_faces": 240,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 255,
+          "tracker_frames_with_faces": 240,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 13.58,
+          "fps": 73.6,
+          "raw_faces_detected": 240,
+          "raw_frames_with_faces": 240,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 255,
+          "tracker_frames_with_faces": 240,
+          "tracker_unprotected_frames": 0
+        }
+      ]
+    },
+    "test_faces_basic.mp4": {
+      "total_frames": 60,
+      "fps_original": 10.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 12.15,
+          "fps": 82.3,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 33.56,
+          "fps": 29.8,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 14.57,
+          "fps": 68.6,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        }
+      ]
+    },
+    "test_faces_multi.mp4": {
+      "total_frames": 60,
+      "fps_original": 10.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 11.95,
+          "fps": 83.7,
+          "raw_faces_detected": 180,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 180,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 32.77,
+          "fps": 30.5,
+          "raw_faces_detected": 180,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 180,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 15.27,
+          "fps": 65.5,
+          "raw_faces_detected": 180,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 180,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        }
+      ]
+    },
+    "test_mixed.mp4": {
+      "total_frames": 60,
+      "fps_original": 10.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 12.18,
+          "fps": 82.1,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "error": "name 'math' is not defined"
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 41.76,
+          "fps": 23.9,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 14.89,
+          "fps": 67.2,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        }
+      ]
+    },
+    "test_mixed_fake_ns.mp4": {
+      "total_frames": 60,
+      "fps_original": 10.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 49.89,
+          "fps": 20.0,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "yunet_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 136.24,
+          "fps": 7.3,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "yunet_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 34.82,
+          "fps": 28.7,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 33.49,
+          "fps": 29.9,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 15.14,
+          "fps": 66.0,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        }
+      ]
+    },
+    "test_mixed_fake_telea.mp4": {
+      "total_frames": 60,
+      "fps_original": 10.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 12.01,
+          "fps": 83.3,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "yunet_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 40.98,
+          "fps": 24.4,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "yunet_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 33.34,
+          "fps": 30.0,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 33.35,
+          "fps": 30.0,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 15.5,
+          "fps": 64.5,
+          "raw_faces_detected": 60,
+          "raw_frames_with_faces": 60,
+          "raw_missed_frames": 0,
+          "longest_miss_run": 0,
+          "tracker_faces_detected": 60,
+          "tracker_frames_with_faces": 60,
+          "tracker_unprotected_frames": 0
+        }
+      ]
+    },
+    "test_pii_text.mp4": {
+      "total_frames": 60,
+      "fps_original": 10.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 13.44,
+          "fps": 74.4,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "yunet_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 42.81,
+          "fps": 23.4,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "yunet_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 33.3,
+          "fps": 30.0,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 34.51,
+          "fps": 29.0,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 16.13,
+          "fps": 62.0,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        }
+      ]
+    },
+    "test_zones.mp4": {
+      "total_frames": 60,
+      "fps_original": 10.0,
+      "detectors": [
+        {
+          "backend": "mediapipe_cpu",
+          "device": "cpu",
+          "provider": "MediaPipe",
+          "avg_latency_ms": 12.12,
+          "fps": 82.5,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "yunet_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 41.0,
+          "fps": 24.4,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "yunet_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 36.86,
+          "fps": 27.1,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "scrfd_cpu",
+          "device": "cpu",
+          "provider": "CPUExecutionProvider",
+          "avg_latency_ms": 34.56,
+          "fps": 28.9,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        },
+        {
+          "backend": "scrfd_cuda",
+          "device": "cuda",
+          "provider": "CUDAExecutionProvider",
+          "avg_latency_ms": 15.19,
+          "fps": 65.8,
+          "raw_faces_detected": 0,
+          "raw_frames_with_faces": 0,
+          "raw_missed_frames": 60,
+          "longest_miss_run": 60,
+          "tracker_faces_detected": 0,
+          "tracker_frames_with_faces": 0,
+          "tracker_unprotected_frames": 60
+        }
+      ]
+    }
+  }
+}
