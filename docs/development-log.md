@@ -228,3 +228,10 @@ Internal, chronological, short. One entry per session/significant change. This i
 - Ensures small/far faces receive high anonymity while large faces remain moderately pixelated but safe.
 - Removed ace_pixelate_intensity parameter across pipeline, webtest settings, jobs, UI, and test suite.
 - Created 	ests/test_pixelate_adaptive.py sweeping different face sizes and printing quantitative diagnostics.
+
+## 2026-08-14 — Architecture research synthesis & new pipeline design
+- Created: docs/architecture-spec.md, docs/architecture-diagrams.md, docs/architecture-decisions.md, docs/new_arch_tasks.md, docs/research-to-architecture.md
+- Why: Synthesized all 8 research phases into a concrete architecture. Audited current codebase. Designed two-pass + redaction pipeline with 10 components. Created sequential implementation roadmap.
+- Key decisions: Boundary scanner for brand-new face problem (P0); GSI over RTS for gap filling; min_hits=1 for privacy; deferred TensorRT; simplified from 3-level tiling to boundary strips + targeted ROI.
+- No production code modified. Documentation only.
+- Commit: uncommitted
