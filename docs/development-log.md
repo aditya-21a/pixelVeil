@@ -255,3 +255,7 @@ Internal, chronological, short. One entry per session/significant change. This i
 - Stripped all guaranteed 'zero-leak' terminology in favor of benchmarked limits.
 - Removed hardcoded values from diagrams and decisions, explicitly labeling them as initial configurable experiments.
 - The architecture is now officially LOCKED.
+
+## 2026-08-15
+- Implemented 	ools/evaluate.py and 	ests/test_evaluate.py to establish the Phase P0 baseline evaluation harness.
+- Calculates bbox IoU, center error, coverage rate, and false positive metrics, bucketed by face size and properties.

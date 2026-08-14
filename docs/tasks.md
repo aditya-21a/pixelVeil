@@ -4,7 +4,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 
 ## PHASE P0 — BASELINE & EVALUATION
-- [ ] TASK-P0-01: Evaluation Harness
+- [x] TASK-P0-01: Evaluation Harness
   - DEPENDENCIES: None
   - FILES TO MODIFY: None
   - FILES TO CREATE: `tools/evaluate.py`, `tests/evaluation_corpus/`
@@ -191,9 +191,9 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## OLD ARCHITECTURE TASKS (Archived)
 
-﻿# PixelVeil ΓÇö TASKS.md
+# PixelVeil ΓÇö TASKS.md
 
-Status legend: `[ ]` todo ┬╖ `[~]` in progress ┬╖ `[x]` done
+Status legend: `[ ]` todo  `[~]` in progress ┬╖ `[x]` done
 
 ---
 

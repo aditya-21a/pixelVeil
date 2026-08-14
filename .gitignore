@@ -5,6 +5,7 @@ venv/
 *.egg-info/
 build/
 dist/
+research/
 *.spec
 tests/sample_videos/*.mp4
 tests/sample_videos/*.mov
