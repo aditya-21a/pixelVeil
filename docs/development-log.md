@@ -259,3 +259,11 @@ Internal, chronological, short. One entry per session/significant change. This i
 ## 2026-08-15
 - Implemented 	ools/evaluate.py and 	ests/test_evaluate.py to establish the Phase P0 baseline evaluation harness.
 - Calculates bbox IoU, center error, coverage rate, and false positive metrics, bucketed by face size and properties.
+
+## 2026-08-15
+- Established Baseline Pipeline Profile (TASK-P0-02) on 	ests/sample_videos/multiple_people.mp4.
+  - Ground Truth: SCRFD-500M (min_confidence=0.3)
+  - System: MediaPipe + Tracker (current pipeline)
+  - Speed: 1.44 FPS
+  - Coverage Rate: 1.0 (0 privacy leak frames)
+  - False Positive Area: 834087.0 px^2 (151 frames duration)

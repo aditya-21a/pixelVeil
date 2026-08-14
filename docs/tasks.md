@@ -12,7 +12,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - TESTS: Unit tests for evaluation metrics.
   - BENCHMARK: N/A
   - ACCEPTANCE CRITERIA: Harness can output quantitative privacy and performance metrics, explicitly distinguishing "Was the face detected?" from "Was the actual face region protected?".
-- [ ] TASK-P0-02: Baseline Pipeline Profile
+- [x] TASK-P0-02: Baseline Pipeline Profile
   - DEPENDENCIES: TASK-P0-01
   - FILES TO MODIFY: None
   - FILES TO CREATE: None
