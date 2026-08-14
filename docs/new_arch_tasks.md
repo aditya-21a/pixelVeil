@@ -10,17 +10,30 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **DEPENDENCIES**: None
 - **FILES TO MODIFY**: None
 - **FILES TO CREATE**: `tools/evaluate.py`, `tests/evaluation_corpus/`
-- **IMPLEMENTATION DETAILS**: Build the evaluation harness *before* changing architecture. Must measure BOTH detection performance and privacy coverage. Metrics: bbox IoU, face-center error (normalized by face size), coverage rate, privacy leakage frames, false positive area, false redaction duration. Metrics must be bucketed by: face-size, edge-distance, occlusion, motion, source of detection, source of recovered protection. Record longest unprotected run and first-visible-frame leakage.
+- **IMPLEMENTATION DETAILS**: Build the evaluation harness *before* changing architecture. It must establish GROUND TRUTH (Face existence / bbox / visibility) against System output. Must measure BOTH detection performance and privacy coverage. Metrics: bbox IoU, face-center error (normalized by face size), coverage rate, privacy leakage frames, false positive area, false redaction duration. Metrics must be bucketed by: face-size, edge-distance, occlusion, motion, source of detection, source of recovered protection. Record longest unprotected run and first-visible-frame leakage.
 - **TESTS**: Unit tests for evaluation metrics.
 - **BENCHMARK**: N/A
 - **ACCEPTANCE CRITERIA**: Harness can output quantitative privacy and performance metrics, explicitly distinguishing "Was the face detected?" from "Was the actual face region protected?".
 - **FAILURE CONDITIONS**: None.
 - **ROLLBACK CONDITION**: None.
 
+### TASK-P03
+- **TITLE**: Profile Current Pipeline
+- **PRIORITY**: P0
+- **DEPENDENCIES**: TASK-P01
+- **FILES TO MODIFY**: None
+- **FILES TO CREATE**: None
+- **IMPLEMENTATION DETAILS**: Run the evaluation harness on the current pipeline to establish the baseline for recall, precision, and processing speed. Do this before any optimization.
+- **TESTS**: N/A
+- **BENCHMARK**: Baseline metrics recorded.
+- **ACCEPTANCE CRITERIA**: Baseline established.
+- **FAILURE CONDITIONS**: N/A
+- **ROLLBACK CONDITION**: N/A
+
 ### TASK-P02
 - **TITLE**: Replace Branch-and-Bound with scipy.optimize.linear_sum_assignment
 - **PRIORITY**: P0
-- **DEPENDENCIES**: TASK-P01
+- **DEPENDENCIES**: TASK-P03
 - **FILES TO MODIFY**: `core/face_tracker.py`
 - **FILES TO CREATE**: None
 - **IMPLEMENTATION DETAILS**: The current `_linear_sum_assignment` is O(N!) recursive brute force. Replace with scipy's O(N^3) Hungarian implementation.
@@ -29,19 +42,6 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **ACCEPTANCE CRITERIA**: All tests pass, O(N^3) performance, identical results for <5 faces.
 - **FAILURE CONDITIONS**: If scipy not available, implement Munkres directly.
 - **ROLLBACK CONDITION**: Revert to branch-and-bound.
-
-### TASK-P03
-- **TITLE**: Profile Current Pipeline
-- **PRIORITY**: P0
-- **DEPENDENCIES**: TASK-P01, TASK-P02
-- **FILES TO MODIFY**: None
-- **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: Run the evaluation harness on the current pipeline to establish the baseline for recall, precision, and processing speed.
-- **TESTS**: N/A
-- **BENCHMARK**: Baseline metrics recorded.
-- **ACCEPTANCE CRITERIA**: Baseline established.
-- **FAILURE CONDITIONS**: N/A
-- **ROLLBACK CONDITION**: N/A
 
 ### TASK-P04
 - **TITLE**: Eliminate Double Video Encoding
@@ -74,7 +74,7 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 ### TASK-P1-1
 - **TITLE**: Implement Linear Kalman Filter
 - **PRIORITY**: P0
-- **DEPENDENCIES**: TASK-A01
+- **DEPENDENCIES**: TASK-P05
 - **FILES TO MODIFY**: `core/face_tracker.py`
 - **FILES TO CREATE**: `core/kalman_tracker.py` (optional)
 - **IMPLEMENTATION DETAILS**: Replace current constant-velocity + damping model with proper Linear Kalman Filter. State vector: `[x, y, w, h, vx, vy, vw, vh]`. Constant velocity model. Process noise Q and measurement noise R as tunable parameters. Track covariance matrix P for uncertainty estimation. Critical: The tracker MUST expose covariance P for downstream uncertainty-aware expansion.
@@ -87,7 +87,7 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 ### TASK-P1-2
 - **TITLE**: Improved Association with Mahalanobis Gating
 - **PRIORITY**: P1
-- **DEPENDENCIES**: TASK-B01
+- **DEPENDENCIES**: TASK-P1-1
 - **FILES TO MODIFY**: `core/face_tracker.py`
 - **FILES TO CREATE**: None
 - **IMPLEMENTATION DETAILS**: Replace current hard-gate association (distance + IoU) with Mahalanobis distance gating using tracker covariance. Initial threshold: 9.48 (status: starting value, must sweep to find optimal threshold for our specific state/measurement dimensionality). Keep IoU as secondary cost metric.
@@ -115,7 +115,7 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 ### TASK-C01
 - **TITLE**: Geometric Validation Gate
 - **PRIORITY**: P1
-- **DEPENDENCIES**: TASK-B01
+- **DEPENDENCIES**: TASK-P1-1
 - **FILES TO MODIFY**: None
 - **FILES TO CREATE**: `core/candidate_validator.py`
 - **IMPLEMENTATION DETAILS**: Validate detection candidates against geometric constraints: aspect ratio (0.5-2.0). Run as first filter after detection. O(1) per candidate. Small candidates (<20px) should be marked UNCERTAIN for targeted recovery / temporal evidence, rather than unconditionally rejected.
@@ -128,7 +128,7 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 ### TASK-C02
 - **TITLE**: Motion Plausibility Validation
 - **PRIORITY**: P2
-- **DEPENDENCIES**: TASK-C01, TASK-B02
+- **DEPENDENCIES**: TASK-C01, TASK-P1-2
 - **FILES TO MODIFY**: `core/candidate_validator.py`
 - **FILES TO CREATE**: None
 - **IMPLEMENTATION DETAILS**: For candidates matching existing tracks, validate motion plausibility via Mahalanobis distance. Reject candidates with impossible motion transitions. Use an initial threshold of 9.48 and require a parameter sweep. Ensure dimensionality matches the measurement vector.
@@ -212,7 +212,7 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 ### TASK-F01
 - **TITLE**: Uncertainty-Aware Region Expansion
 - **PRIORITY**: P1
-- **DEPENDENCIES**: TASK-B01
+- **DEPENDENCIES**: TASK-P1-1
 - **FILES TO MODIFY**: `core/redactor.py`
 - **FILES TO CREATE**: None
 - **IMPLEMENTATION DETAILS**: Compute covariance-derived confidence region -> convert ellipse to axis-aligned margin -> apply configurable confidence level -> clamp using experimentally derived expansion policy. Do not hardcode fixed Z values.

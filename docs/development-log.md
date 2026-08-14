@@ -247,3 +247,11 @@ Internal, chronological, short. One entry per session/significant change. This i
 - Why: Addressed final 6 blockers before freezing the v1 architecture. Fixed contradictions between research mapping and architecture decisions.
 - Key decisions: Confirmed SCRFD-0.5GF baseline, deferred TensorRT, mapped Pass 2 to a strict Re-observation -> GSI fallback sequence, removed remaining hardcoded thresholds from the roadmap, and explicitly delineated detection recall vs. privacy coverage metrics.
 - No production code modified. Documentation locked.
+
+## 2026-08-15 - Architecture Documentation Complete Cleanup
+- Fixed task dependency IDs and ordered P0 roadmap correctly.
+- Formalized three-pass terminology globally.
+- Established explicit separation of EVIDENCE STATE vs PRIVACY ACTION in the architecture spec.
+- Stripped all guaranteed 'zero-leak' terminology in favor of benchmarked limits.
+- Removed hardcoded values from diagrams and decisions, explicitly labeling them as initial configurable experiments.
+- The architecture is now officially LOCKED.

@@ -127,7 +127,7 @@ graph TD
   IF aspect_ratio < 0.5 OR aspect_ratio > 2.0: 
       RETURN INVALID  # completely impossible shape
 
-  IF width < 20 OR height < 20: 
+  IF width < initial_min_size OR height < initial_min_size: 
       # Detector reliability is poor, but could be a real face!
       mark_as_uncertain_for_targeted_roi(detection)
       RETURN UNCERTAIN
@@ -135,16 +135,16 @@ graph TD
   # Stage 2: Motion plausibility (only if matching existing track)
   IF has_matching_track:
       mahalanobis_dist = compute_mahalanobis(detection, track.predicted_state, track.covariance)
-      IF mahalanobis_dist > 9.48: RETURN INVALID  # chi-squared 95%, 4 DOF
+      IF mahalanobis_dist > initial_mahalanobis_threshold: RETURN INVALID  # Must match dimensionality
 
   RETURN VALID  # Privacy-biased: accept by default
   ```
 - **Conditions**: Always runs on new detections.
 - **Failure behavior**: If valid faces are rejected, adjust heuristics.
 - **Parameters**:
-  - `uncertainty_size_threshold`: 20x20 [Experiment: tunable]
+  - `initial_min_size`: 20px [Experiment: tunable initial threshold]
   - `aspect_ratio_range`: 0.5-2.0 [B: Literature]
-  - `mahalanobis_threshold`: 9.48 [B: Literature, chi-squared 95% 4 DOF]
+  - `initial_mahalanobis_threshold`: 9.48 [Experiment: tunable initial threshold]
 - **Dependencies**: None.
 - **Computational cost**: O(1) per candidate, negligible.
 - **Why It Exists**: Categorizes noise vs. real faces without assuming small faces are false positives. 
@@ -159,7 +159,12 @@ graph TD
 - **Outputs**: List of active tracks with state, bbox, covariance.
 - **State**: Track states: CONFIRMED, COASTING, EXPIRED. (NO_TRACK implicitly handled; min_hits=1 removes TENTATIVE). 
   - Track vector: `[cx, cy, w, h, vx, vy, vw, vh]` (8-dimensional). Covariance matrix `P`.
-  - Evidence provenance: Each observation has a source (e.g. FULL_FRAME, BOUNDARY, TARGETED_ROI, INTERPOLATED, PREDICTED).
+  - **State separation**: 
+      Observation:
+          `evidence_state`: DETECTED | RECOVERED | INTERPOLATED | PREDICTED | UNRESOLVED
+          `provenance`: FULL_FRAME | BOUNDARY | TARGETED_ROI | BACKWARD_SEARCH | GSI | TRACK_PREDICTION
+      Protection:
+          `privacy_action`: REDACT | DO_NOT_REDACT
 - **Algorithm**:
   ```python
   # Canonical Association Algorithm:
@@ -186,7 +191,7 @@ graph TD
 
   # Expiration
   FOR coasting tracks:
-      IF missing_frames > max_missing (30): EXPIRE
+      IF missing_frames > initial_max_missing_frames: EXPIRE
       IF total_displacement > max_displacement: EXPIRE  
       IF off_screen: EXPIRE
   ```
@@ -195,7 +200,7 @@ graph TD
 - **Parameters**:
   - `Process noise Q`: diagonal, tunable [C: Reasonable starting value]
   - `Measurement noise R`: diagonal, tunable [C: Reasonable starting value]
-  - `max_missing_frames`: 30 [B: Literature]
+  - `initial_max_missing_frames`: 30 [Experiment: tunable initial limit]
   - `max_total_coast_displacement`: 200px [A: PixelVeil-validated]
   - `high_confidence_threshold`: 0.5 [A: PixelVeil-validated]
   - `low_confidence_threshold`: 0.15 [C: Reasonable starting value]

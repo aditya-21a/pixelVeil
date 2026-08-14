@@ -48,22 +48,22 @@ This document records every major architectural decision with full justification
 **Open validation needed**: Parameters such as strip width and scan frequency are unvalidated.
 
 ### DEC-06: GSI-based mid-track gap interpolation (not RTS, not linear)
-**Decision**: Use Gaussian-Smoothed Interpolation for mid-track gaps instead of RTS smoother or linear interpolation.
+**Decision**: GSI is the selected candidate for the mid-track interpolation experiment. It must measurably outperform current tracker prediction and linear interpolation.
 **Reason**: Motion of biological subjects (faces) is non-linear and noisy; linear interpolation fails on noise and RTS smoothers struggle with irregular motion.
 **Research evidence**: Phase 5 found RTS fails on irregular biological motion. GSI models non-linear dynamics. Linear interpolation fails on noisy data.
 **Alternative considered**: RTS smoother, linear interpolation.
 **Why alternative rejected**: RTS smoother fails on non-linear motion, and linear interpolation fails on noisy data.
-**Confidence**: MEDIUM — literature-supported.
-**Open validation needed**: Has not been experimentally validated within the PixelVeil context.
+**Confidence**: MEDIUM — literature-supported candidate.
+**Open validation needed**: Must be experimentally validated against linear interpolation within the PixelVeil context.
 
-### DEC-07: Backward targeted SCRFD for track-start recovery (max 20 frames)
-**Decision**: When a new track is confirmed, search backward up to 20 frames using targeted SCRFD at the predicted prior position.
-**Reason**: To recover potential initial missed detections before the face was formally tracked, minimizing privacy leakage at track onset.
+### DEC-07: Backward targeted SCRFD for track-start recovery
+**Decision**: When a new track is confirmed, search backward up to a configurable budget of frames using targeted SCRFD at the predicted prior position. Initial experimental value: 20 frames.
+**Reason**: To recover potential initial missed detections before the face was formally tracked, minimizing privacy leakage at track onset under defined benchmark conditions.
 **Research evidence**: Phase 6 found empirical recovery ceiling at 20 frames. 95% terminated by frame 26. Cycle consistency validates results.
 **Alternative considered**: Unlimited backward search, or no backward search.
 **Why alternative rejected**: Unlimited search yields diminishing returns and false positive risks. No backward search results in guaranteed privacy leakage.
 **Confidence**: MEDIUM — literature-supported.
-**Open validation needed**: The 20-frame limit needs PixelVeil-specific validation.
+**Open validation needed**: The frame budget needs PixelVeil-specific validation.
 
 ### DEC-08: Adaptive pixelation with noise overlay
 **Decision**: Use adaptive pixelation (block size scales with face width) plus a Gaussian noise overlay for redaction.
@@ -92,14 +92,14 @@ This document records every major architectural decision with full justification
 **Confidence**: HIGH — justified by both privacy principles and compute limits.
 **Open validation needed**: None.
 
-### DEC-11: No TensorRT in v1
-**Decision**: Keep ONNX Runtime for v1. Do not implement TensorRT.
+### DEC-11: TensorRT deferred
+**Decision**: TensorRT is not in the current architecture. Reconsider only if measured benefit justifies complexity.
 **Reason**: TensorRT adds significant engineering and deployment complexity for limited practical gain in the current offline use case.
 **Research evidence**: Phase 7 found TensorRT gives 1.5-2x speedup, but SCRFD CUDA already runs at 67 FPS. PixelVeil is offline, so real-time is not required.
 **Alternative considered**: Implement TensorRT backend.
 **Why alternative rejected**: Tradeoff between engineering complexity and performance benefit is unfavorable for v1 offline processing.
 **Confidence**: HIGH — ONNX Runtime performance is sufficient.
-**Open validation needed**: None.
+**Open validation needed**: Benchmark after end-to-end baseline if performance is a bottleneck.
 
 ### DEC-12: Feathered redaction edges (minimum 16px)
 **Decision**: All redaction boundaries must have alpha-blended feathering of at least 16 pixels (one H.264 macroblock).
@@ -129,10 +129,10 @@ This document records every major architectural decision with full justification
 **Open validation needed**: None, ffmpeg pipe is a standard approach.
 
 ### DEC-15: Bounded privacy protection policy
-**Decision**: During coasting/recovery, protect with uncertainty-expanded region. Maximum protection duration: 30 frames. Maximum spatial expansion: 1.5x original detection size.
+**Decision**: During coasting/recovery, protect with uncertainty-expanded region up to configurable limits. Initial experimental values: 30-frame duration, 1.5x spatial expansion.
 **Reason**: Prevents indefinite ghost redactions when faces leave the frame, while ensuring sufficient coverage when they are temporarily occluded.
 **Research evidence**: Phase 3 found max_age=30 is literature-supported. Phase 8 found max expansion cap of 1.5x.
 **Alternative considered**: Indefinite protection (ghost redaction), immediate stop.
 **Why alternative rejected**: Indefinite protection causes permanent false redactions. Immediate stop causes severe privacy leakage during transient occlusions.
 **Confidence**: MEDIUM.
-**Open validation needed**: The 30-frame limit and 1.5x expansion are reasonable starting values (Parameter Class C) and need tuning.
+**Open validation needed**: The frame duration limit and expansion cap are parameterized starting values and need parameter sweeps.

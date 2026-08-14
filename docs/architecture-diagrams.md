@@ -1,6 +1,6 @@
 # PixelVeil Architecture Diagrams
 
-This document contains the visual architecture of the PixelVeil pipeline, outlining the dual-pass processing, recovery mechanisms, and privacy safety layer.
+This document contains the visual architecture of the PixelVeil pipeline, outlining the three-pass processing, recovery mechanisms, and privacy safety layer.
 
 ## 1. High-Level Architecture
 The three-pass pipeline strictly separating forward tracking, offline recovery, and redaction rendering.
@@ -129,7 +129,7 @@ Backward searching to catch faces before they were confidently detected.
 
 ```mermaid
 graph TD
-    A[New track confirmed at frame N] --> B[Search backward from N-1 to max 0, N-20]
+    A[New track confirmed at frame N] --> B[Search backward up to configured budget]
     B --> C[For each frame:]
     subgraph Iteration
         C --> D[Generate search ROI from forward-projected position + adaptive padding]
@@ -150,17 +150,17 @@ Final output generation with guaranteed occlusion.
 ```mermaid
 graph TD
     A[Track bbox] --> B[Head expansion<br>25% horizontal, 45% top, 15% bottom]
-    B --> C[Uncertainty dilation<br>from tracker covariance, max 1.5x]
-    C --> D[Adaptive pixelation<br>block_size = 0.08 × head_width]
-    D --> E[Gaussian noise overlay]
-    E --> F[Feathered edges<br>min 16px for H.264 macroblock]
+    B --> C[Uncertainty dilation<br>from tracker covariance, up to configured cap]
+    C --> D[Adaptive pixelation<br>configured policy]
+    D --> E[Redaction composition<br>configured disruption policy]
+    E --> F[Feathered edges<br>configured width for H.264 macroblock]
     F --> G[Write to output frame]
 ```
 
 **PARAMETERS:**
 - Head expansion: H (25%), T (45%), B (15%) [Validation: C]
-- Max dilation: 1.5x [Validation: D]
-- Macroblock edge feathering: 16px [Validation: B]
+- Max dilation: configured cap [Validation: D]
+- Macroblock edge feathering: configured width [Validation: B]
 
 ## 9. Compute Architecture (GTX 1650)
 Hardware utilization split between GPU and CPU.

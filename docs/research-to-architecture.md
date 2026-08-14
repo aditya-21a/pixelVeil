@@ -44,15 +44,15 @@ All numerical parameters are marked with their validation status:
 ### 1.4 Minimum Resolution Limit
 - **Research finding**: 32-pixel threshold [B: Literature]: Detection accuracy deteriorates exponentially below 32px face size.
 - **→ implication**: Inputs must be scaled such that target faces remain ≥ 32px.
-- **→ architecture decision**: Reject detections below an absolute minimum size where false positives spike.
-- **→ implementation task**: Implement `min_face_size` filter set to 20x20 [B].
+- **→ architecture decision**: Mark detections below an absolute minimum size as UNCERTAIN rather than rejecting them, deferring to temporal evidence.
+- **→ implementation task**: Implement `min_face_size` as an initial experimental threshold (e.g., 20px) [B].
 - **→ validation experiment**: Measure precision-recall curves across face sizes from 10px to 50px.
 
 ### 1.5 Model Selection (WIDER FACE)
 - **Research finding**: WIDER FACE Hard: SCRFD-0.5GF achieves 68.50% Hard AP. SCRFD-10GF achieves 83.05%.
 - **→ implication**: The lightweight model is significantly worse at hard (small/occluded) faces.
-- **→ architecture decision**: Use SCRFD-0.5GF (500M) as the baseline for performance, but treat larger models (e.g., SCRFD-10GF) as explicit benchmark candidates for offline processing.
-- **→ implementation task**: Benchmark recall vs inference time of SCRFD-0.5GF vs 2.5GF/10GF on PixelVeil test corpus before locking the final model.
+- **→ architecture decision**: SCRFD family is locked; 0.5GF is the current baseline, model size remains an experiment.
+- **→ implementation task**: Make model size an explicit P0 experiment. Benchmark recall vs inference time of SCRFD-0.5GF vs 2.5GF/10GF on PixelVeil test corpus before locking the final model.
 - **→ validation experiment**: Compare privacy coverage vs processing time for 0.5GF vs 10GF.
 
 ### 1.6 Input-Resolution Problem
@@ -167,7 +167,7 @@ All numerical parameters are marked with their validation status:
 
 ## 4. Recovery & Backfilling Component
 
-**WHY IT EXISTS**: To retroactively find faces that were missed at the very beginning of a track (e.g., entering the frame or emerging from heavy occlusion) to guarantee zero-leak privacy.
+**WHY IT EXISTS**: To retroactively find faces that were missed at the very beginning of a track (e.g., entering the frame or emerging from heavy occlusion) to minimize privacy leakage under defined benchmark conditions.
 **INPUT**: Confirmed track trajectories.
 **DECISION**: Search backward in time from the start of a track to find earlier instances of the face.
 **OUTPUT**: Extended track histories.
@@ -216,10 +216,10 @@ All numerical parameters are marked with their validation status:
 - **→ validation experiment**: Run CodeFormer/Revelio against redacted output and measure AdaFace similarity (<0.50 CelebA [B]). Ensure visual artifacts don't degrade non-face regions.
 
 ### 5.2 Adaptive Pixelation
-- **Research finding**: Adaptive pixelation: Block size must scale with true head width. Adaptive pixelation scalar: 0.08 × W_head [B]. Base pixelation threshold: 16x16 pixels [B].
+- **Research finding**: Adaptive pixelation: Block size must scale with true head width. Adaptive pixelation scalar: 0.08 * W_head [B]. Base pixelation threshold: 4x4 pixels [B].
 - **→ implication**: Static block sizes leave large faces identifiable and turn small faces into solid blocks.
-- **→ architecture decision**: Dynamically calculate pixelation block size per frame per face based on bounding box width.
-- **→ implementation task**: Implement `block_size = max(16, int(0.08 * bbox_width))`.
+- **→ architecture decision**: Dynamically calculate pixelation block size per frame per face based on bounding box width, treated as an experimental parameter sweep.
+- **→ implementation task**: Implement `block_size = max(4, int(0.08 * face_width))` as a configurable baseline for the parameter sweep.
 - **→ validation experiment**: Visually verify block proportionality on faces ranging from 30px to 800px wide.
 
 ### 5.3 Mask Edges & H.264 Ringing
