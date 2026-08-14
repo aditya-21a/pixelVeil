@@ -7,7 +7,8 @@ This document details the component specification for the new PixelVeil architec
 ```mermaid
 graph TD
     FD[FrameDecoder] --> FFD[FullFrameDetector]
-    FD --> BS[BoundaryScanner]
+    FD --> BRP[BoundaryRecoveryPolicy]
+    BRP --> BS[BoundaryScanner]
     FFD --> CV[CandidateValidator]
     BS --> CV
     CV --> KT[KalmanTracker]
@@ -83,12 +84,7 @@ graph TD
 - **State**: None (Stateless).
 - **Algorithm**:
   ```python
-  # Implementation is an experimental policy. Must benchmark:
-  # 1. 4 strips (all edges)
-  # 2. 2 horizontal strips (top/bottom)
-  # 3. 2 vertical strips (left/right)
-  # 4. Alternating strips per frame
-  # 5. Sampled boundary scans
+  # Frame -> Boundary Recovery Policy -> [scan / skip / alternate / sample]
   
   strip_width = max(64, int(frame_width * 0.10))  # [Experiment: tunable]
 
@@ -157,7 +153,7 @@ graph TD
 - **Purpose**: Maintain temporal identity and spatial predictions across frames.
 - **Inputs**: List of validated detections per frame.
 - **Outputs**: List of active tracks with state, bbox, covariance.
-- **State**: Track states: CONFIRMED, COASTING, EXPIRED. (NO_TRACK implicitly handled; min_hits=1 removes TENTATIVE). 
+- **State**: Track states: CONFIRMED, COASTING, EXPIRED. (NO_TRACK implicitly handled; `min_hits=1` minimizes confirmation latency and avoids intentionally withholding protection during the first detected frame). 
   - Track vector: `[cx, cy, w, h, vx, vy, vw, vh]` (8-dimensional). Covariance matrix `P`.
   - **State separation**: 
       Observation:
@@ -446,7 +442,7 @@ graph TD
   # PASS 1: Forward detection and tracking
   FOR each frame in video:
       detections = full_frame_scrfd(frame)
-      boundary_dets = boundary_scanner(frame)
+      boundary_dets = apply_boundary_recovery_policy(frame)
       all_dets = merge(detections, boundary_dets)
       validated_dets = candidate_validator(all_dets)
       tracks = kalman_tracker.update(validated_dets, frame_shape)

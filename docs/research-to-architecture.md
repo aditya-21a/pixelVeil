@@ -38,7 +38,7 @@ All numerical parameters are marked with their validation status:
 - **Research finding**: Sample Imbalance [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Training data biased toward large centered faces. Models learn structural priors that break when faces are >30% occluded.
 - **→ implication**: Detection confidence will plummet during heavy occlusion.
 - **→ architecture decision**: Do not rely solely on the detector to maintain tracks during occlusion; shift responsibility to the tracker.
-- **→ implementation task**: Implement robust tracking (e.g., OC-SORT) that tolerates missing detections.
+- **→ implementation task**: Implement robust tracking (PixelVeil Spatial-Kinematic Association) that tolerates missing detections.
 - **→ validation experiment**: Track faces moving behind obstacles (e.g., pillars) and measure ID switch/fragmentation rate.
 
 ### 1.4 Minimum Resolution Limit
@@ -103,10 +103,10 @@ All numerical parameters are marked with their validation status:
 - **→ validation experiment**: Profile execution time and precision impact of each stage.
 
 ### 2.2 Geometric Constraints
-- **Research finding**: Geometric Stage 1 prunes ~80% background noise in O(1). Aspect ratio range: 0.5 to 2.0 [B]. Minimum face size: 20x20 pixels [B].
+- **Research finding**: Geometric Stage 1 prunes ~80% background noise in O(1). Aspect ratio range: 0.5 to 2.0 [B]. 20px = initial uncertainty threshold, NOT a rejection threshold [B].
 - **→ implication**: Cheap math can eliminate the vast majority of junk detections.
-- **→ architecture decision**: Enforce strict geometric boundaries on raw bounding boxes.
-- **→ implementation task**: Add aspect ratio and minimum size checks before passing to tracker.
+- **→ architecture decision**: Enforce geometric boundaries on raw bounding boxes, marking size outliers as UNCERTAIN rather than rejecting.
+- **→ implementation task**: Add aspect ratio and uncertainty size checks before passing to tracker.
 - **→ validation experiment**: Measure % of false positives dropped by geometric checks alone.
 
 ### 2.3 Temporal Confirmation (Privacy focus)

@@ -145,7 +145,7 @@ graph TD
 ```
 
 ## 8. Privacy/Redaction Pipeline
-Final output generation with guaranteed occlusion.
+Privacy-preserving redaction with bounded uncertainty handling.
 
 ```mermaid
 graph TD
