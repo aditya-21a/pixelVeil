@@ -432,7 +432,7 @@ graph TD
 
 ## 10. PipelineOrchestrator
 
-- **Purpose**: Coordinate all components across two passes.
+- **Purpose**: Coordinate all components across three passes.
 - **Inputs**: Video source.
 - **Outputs**: Redacted video.
 - **State**: Orchestrates entire pipeline state.
@@ -459,14 +459,26 @@ graph TD
       }
 
   # PASS 2: Offline recovery (operates on stored track data)
-  gap_resolver.resolve_mid_track_gaps(all_tracks)
-  gap_resolver.resolve_track_starts(all_tracks, video_frames)
-
-  # Targeted ROI recovery for suspicious regions
-  FOR each suspicious_region:
-      IF suspicious_region.type == 'COASTING_TRACK':
-          roi_dets = targeted_roi_scrfd(frames[region.frame], region)
-          IF roi_dets: update_track(region.track, roi_dets)
+  FOR each track in all_tracks:
+      # Step 1: Detect gaps
+      gaps = gap_resolver.detect_gaps(track)
+      
+      # Step 2: Targeted re-observation
+      FOR each gap in gaps:
+          roi_dets = targeted_roi_scrfd(gap.frames, gap.roi)
+          
+          # Step 3: Recovered detections
+          IF roi_dets: 
+              update_track_with_observations(track, roi_dets)
+              
+      # Step 4: Remaining unresolved gap
+      remaining_gaps = gap_resolver.detect_gaps(track)
+      
+      # Step 5 & 6: GSI and provisional protection
+      FOR each gap in remaining_gaps:
+          gsi_success = gap_resolver.apply_gsi(track, gap)
+          IF NOT gsi_success:
+              apply_provisional_protection(track, gap)
 
   # PASS 3: Redaction (renders final output)
   FOR each frame in video:

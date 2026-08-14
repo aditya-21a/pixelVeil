@@ -51,16 +51,16 @@ All numerical parameters are marked with their validation status:
 ### 1.5 Model Selection (WIDER FACE)
 - **Research finding**: WIDER FACE Hard: SCRFD-0.5GF achieves 68.50% Hard AP. SCRFD-10GF achieves 83.05%.
 - **→ implication**: The lightweight model is significantly worse at hard (small/occluded) faces.
-- **→ architecture decision**: Use SCRFD-10GF (or equivalent 500M+ model) for offline processing where real-time is not required.
-- **→ implementation task**: Upgrade default ONNX model to larger variant.
-- **→ validation experiment**: Benchmark recall of SCRFD-0.5GF vs 10GF on PixelVeil test corpus.
+- **→ architecture decision**: Use SCRFD-0.5GF (500M) as the baseline for performance, but treat larger models (e.g., SCRFD-10GF) as explicit benchmark candidates for offline processing.
+- **→ implementation task**: Benchmark recall vs inference time of SCRFD-0.5GF vs 2.5GF/10GF on PixelVeil test corpus before locking the final model.
+- **→ validation experiment**: Compare privacy coverage vs processing time for 0.5GF vs 10GF.
 
 ### 1.6 Input-Resolution Problem
 - **Research finding**: Input-Resolution Problem: A 16x16 face becomes sub-pixel at Stride-32. Globally downscaling 4K to 640x640 destroys high-frequency spatial information.
 - **→ implication**: Direct downscaling is mathematically destructive to distant subjects.
-- **→ architecture decision**: Implement tiling to preserve pixel density.
-- **→ implementation task**: Add Tiling/SAHI integration.
-- **→ validation experiment**: Verify small face recall on 4K footage.
+- **→ architecture decision**: Full-frame SAHI is rejected as default. Selective ROI (Targeted Recovery) is the target architecture.
+- **→ implementation task**: Add targeted ROI inference for suspicious regions rather than full-frame tiling.
+- **→ validation experiment**: Verify small face recall using selective ROI on 4K footage.
 
 ### 1.7 Tiling and Confidence Calibration
 - **Research finding**: Confidence inflation on crops [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Tightly cropping removes background noise, inflating confidence (e.g., 0.55 full-frame → 0.98 on crop). Static thresholds fail across domains.
@@ -79,9 +79,9 @@ All numerical parameters are marked with their validation status:
 ### 1.9 Hardware Acceleration & Batching
 - **Research finding**: TensorRT provides 1.5-2x speedup over PyTorch, 20-50% lower latency than ONNX Runtime. Batch 4-8 maximizes throughput. OOM at batch >8 for larger models on 6GB. [SUPPORTED BY LITERATURE NOT PV-VALIDATED]
 - **→ implication**: Synchronous single-frame ONNX is bottlenecking the current pipeline.
-- **→ architecture decision**: Adopt batch processing and TensorRT backend for production offline processing.
-- **→ implementation task**: Refactor detection pipeline to yield batches and utilize TensorRT EP.
-- **→ validation experiment**: Benchmark throughput (FPS) for Batch=1 vs Batch=4 on GTX 1650.
+- **→ architecture decision**: TensorRT is deferred pending an end-to-end benchmark. Batch processing can be evaluated.
+- **→ implementation task**: Benchmark PyTorch vs ONNX Runtime vs TensorRT.
+- **→ validation experiment**: Benchmark throughput (FPS) on GTX 1650 before committing to TensorRT complexity.
 
 ---
 
@@ -129,17 +129,17 @@ All numerical parameters are marked with their validation status:
 **COMPUTATIONAL COST**: Low-Medium (Depending on assignment algorithm and smoothing).
 
 ### 3.1 Tracker Selection & Algorithm
-- **Research finding**: ByteTrack/OC-SORT recommended [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Strong spatial/mathematical heuristics without CNN feature extractors. Good for single-class face tracking on consumer GPUs. Linear Constant Velocity Kalman filter remains standard.
+- **Research finding**: ByteTrack/OC-SORT style tracking recommended [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Strong spatial/mathematical heuristics without CNN feature extractors. Good for single-class face tracking on consumer GPUs. Linear Constant Velocity Kalman filter remains standard.
 - **→ implication**: The current custom tracker (branch-and-bound, exponential damping) is sub-optimal and slow (O(N!)).
-- **→ architecture decision**: Replace custom tracker with an established Kalman-filter based algorithm like ByteTrack or OC-SORT.
-- **→ implementation task**: Integrate OC-SORT (Observation-Centric SORT) to handle missing detections gracefully.
-- **→ validation experiment**: Compare MOTA and ID switches between current custom tracker and OC-SORT on heavily occluded datasets.
+- **→ architecture decision**: Replace custom tracker with PixelVeil Spatial-Kinematic Association (Kalman + feasibility gates + Mahalanobis + IoU/geometry cost + Hungarian).
+- **→ implementation task**: Implement canonical association combining these mathematical components.
+- **→ validation experiment**: Benchmark against ByteTrack/OC-SORT as baselines to ensure the custom formulation matches or exceeds their performance on heavily occluded datasets.
 
 ### 3.2 Two-Stage Association
-- **Research finding**: ByteTrack two-stage association [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Cascaded spatial proximity + IoU. Trusts low-confidence detections during partial visibility.
+- **Research finding**: Two-stage association [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Cascaded spatial proximity + IoU. Trusts low-confidence detections during partial visibility.
 - **→ implication**: Discarding low-confidence detections outright breaks tracks.
-- **→ architecture decision**: Keep low-confidence boxes (e.g., 0.1 to 0.5) solely for track association, not track creation.
-- **→ implementation task**: Implement ByteTrack's two-stage matching logic.
+- **→ architecture decision**: Keep low-confidence boxes (e.g., 0.1 to 0.5) solely for optional secondary track association, not track creation.
+- **→ implementation task**: Implement optional low-confidence secondary association.
 - **→ validation experiment**: Track faces walking behind trees; verify track persistence using low-confidence boxes.
 
 ### 3.3 Anomaly Detection (Mahalanobis)

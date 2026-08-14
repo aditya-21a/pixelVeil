@@ -241,3 +241,9 @@ Internal, chronological, short. One entry per session/significant change. This i
 - Why: Implemented feedback from hostile review. Addressed over-claims and dogmatic thresholding (1px error, 20-frame limit, 1.5x cap). Shifted hardcoded "truths" to tunable experiments.
 - Key decisions: Confirmed 3-pass architecture (Detection, Offline Recovery, Redaction). Simplified state machine by dropping TENTATIVE state due to min_hits=1. Re-ordered roadmap to prioritize the Evaluation Framework (Phase P0).
 - No production code modified. Documentation only.
+
+## 2026-08-14 - Architecture Final Lock
+- Edited: docs/architecture-spec.md, docs/new_arch_tasks.md, docs/research-to-architecture.md
+- Why: Addressed final 6 blockers before freezing the v1 architecture. Fixed contradictions between research mapping and architecture decisions.
+- Key decisions: Confirmed SCRFD-0.5GF baseline, deferred TensorRT, mapped Pass 2 to a strict Re-observation -> GSI fallback sequence, removed remaining hardcoded thresholds from the roadmap, and explicitly delineated detection recall vs. privacy coverage metrics.
+- No production code modified. Documentation locked.

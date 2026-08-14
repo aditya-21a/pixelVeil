@@ -10,10 +10,10 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **DEPENDENCIES**: None
 - **FILES TO MODIFY**: None
 - **FILES TO CREATE**: `tools/evaluate.py`, `tests/evaluation_corpus/`
-- **IMPLEMENTATION DETAILS**: Build the evaluation harness *before* changing architecture. Must measure bbox IoU, face-center error, coverage rate, privacy leakage frames, and false positive area.
+- **IMPLEMENTATION DETAILS**: Build the evaluation harness *before* changing architecture. Must measure BOTH detection performance and privacy coverage. Metrics: bbox IoU, face-center error (normalized by face size), coverage rate, privacy leakage frames, false positive area, false redaction duration. Metrics must be bucketed by: face-size, edge-distance, occlusion, motion, source of detection, source of recovered protection. Record longest unprotected run and first-visible-frame leakage.
 - **TESTS**: Unit tests for evaluation metrics.
 - **BENCHMARK**: N/A
-- **ACCEPTANCE CRITERIA**: Harness can run on a test video and output quantitative privacy and performance metrics.
+- **ACCEPTANCE CRITERIA**: Harness can output quantitative privacy and performance metrics, explicitly distinguishing "Was the face detected?" from "Was the actual face region protected?".
 - **FAILURE CONDITIONS**: None.
 - **ROLLBACK CONDITION**: None.
 
@@ -90,7 +90,7 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **DEPENDENCIES**: TASK-B01
 - **FILES TO MODIFY**: `core/face_tracker.py`
 - **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: Replace current hard-gate association (distance + IoU) with Mahalanobis distance gating using tracker covariance. Threshold: 9.48 (chi-squared 95%, 4 DOF). Keep IoU as secondary cost metric.
+- **IMPLEMENTATION DETAILS**: Replace current hard-gate association (distance + IoU) with Mahalanobis distance gating using tracker covariance. Initial threshold: 9.48 (status: starting value, must sweep to find optimal threshold for our specific state/measurement dimensionality). Keep IoU as secondary cost metric.
 - **TESTS**: Association tests with various scenarios. Crossing faces test.
 - **BENCHMARK**: Track switches and fragmentations vs current.
 - **ACCEPTANCE CRITERIA**: Fewer track switches, proper gating of impossible associations.
@@ -118,10 +118,10 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **DEPENDENCIES**: TASK-B01
 - **FILES TO MODIFY**: None
 - **FILES TO CREATE**: `core/candidate_validator.py`
-- **IMPLEMENTATION DETAILS**: Validate detection candidates against geometric constraints: minimum size (20x20), aspect ratio (0.5-2.0). Run as first filter after detection. O(1) per candidate.
+- **IMPLEMENTATION DETAILS**: Validate detection candidates against geometric constraints: aspect ratio (0.5-2.0). Run as first filter after detection. O(1) per candidate. Small candidates (<20px) should be marked UNCERTAIN for targeted recovery / temporal evidence, rather than unconditionally rejected.
 - **TESTS**: Unit tests with valid faces, tiny noise, extreme aspect ratios.
-- **BENCHMARK**: False positive reduction rate.
-- **ACCEPTANCE CRITERIA**: Prunes ~80% of background noise. Zero valid faces rejected.
+- **BENCHMARK**: False positive reduction rate vs privacy recall.
+- **ACCEPTANCE CRITERIA**: Prunes background noise. Explicitly forbids unconditional rejection of small valid faces.
 - **FAILURE CONDITIONS**: If valid small faces rejected, lower minimum size.
 - **ROLLBACK CONDITION**: Remove validation gate.
 
@@ -131,7 +131,7 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **DEPENDENCIES**: TASK-C01, TASK-B02
 - **FILES TO MODIFY**: `core/candidate_validator.py`
 - **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: For candidates matching existing tracks, validate motion plausibility via Mahalanobis distance. Reject candidates with D_M^2 > 9.48.
+- **IMPLEMENTATION DETAILS**: For candidates matching existing tracks, validate motion plausibility via Mahalanobis distance. Reject candidates with impossible motion transitions. Use an initial threshold of 9.48 and require a parameter sweep. Ensure dimensionality matches the measurement vector.
 - **TESTS**: Test with smooth motion, sudden jumps, noise.
 - **BENCHMARK**: Track switch reduction.
 - **ACCEPTANCE CRITERIA**: Impossible motion transitions rejected.
@@ -166,33 +166,20 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **FAILURE CONDITIONS**: If false suspicion rate too high, tune thresholds.
 - **ROLLBACK CONDITION**: Remove suspicion detection.
 
-### TASK-D03
-- **TITLE**: Targeted ROI SCRFD Inference
-- **PRIORITY**: P1
-- **DEPENDENCIES**: TASK-D02
-- **FILES TO MODIFY**: `core/face_detector.py`, `core/video_pipeline.py`
-- **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: For suspicious regions, crop the ROI with overlap margin, run SCRFD at higher effective resolution. Map detections back to full-frame coordinates. Merge with full-frame results using NMS. Adjust confidence threshold for cropped context (full-frame 0.5 ≈ crop 0.75).
-- **TESTS**: Test ROI detection on known difficult faces.
-- **BENCHMARK**: Recovery rate, latency per ROI inference.
-- **ACCEPTANCE CRITERIA**: Recovers faces missed by full-frame detection.
-- **FAILURE CONDITIONS**: If ROI inference too slow, batch or skip.
-- **ROLLBACK CONDITION**: Remove targeted inference.
-
-## PHASE E: Offline Recovery
+## PHASE E: Offline Recovery (Pass 2 Sequence)
 
 ### TASK-E01
-- **TITLE**: Mid-Track Gap Detection
+- **TITLE**: Gap Detection & Targeted Re-observation
 - **PRIORITY**: P1
-- **DEPENDENCIES**: TASK-B01
-- **FILES TO MODIFY**: None
-- **FILES TO CREATE**: `core/gap_resolver.py`
-- **IMPLEMENTATION DETAILS**: After Pass 1 completes, scan all track timelines for gaps. A gap is defined as consecutive COASTING frames bounded by CONFIRMED frames on both sides.
-- **TESTS**: Test gap detection with various patterns.
-- **BENCHMARK**: N/A
-- **ACCEPTANCE CRITERIA**: All gaps correctly identified with start/end frames.
-- **FAILURE CONDITIONS**: N/A
-- **ROLLBACK CONDITION**: N/A
+- **DEPENDENCIES**: TASK-P1-5
+- **FILES TO MODIFY**: `core/gap_resolver.py`, `core/face_detector.py`
+- **FILES TO CREATE**: None
+- **IMPLEMENTATION DETAILS**: After Pass 1 completes, execute exactly this sequence: (1) Detect Gap, (2) Targeted re-observation (run SCRFD on gap frames using ROI from known endpoints), (3) If recovered, update timeline with actual detections.
+- **TESTS**: Test gap detection and ROI recovery on known difficult faces.
+- **BENCHMARK**: Recovery rate.
+- **ACCEPTANCE CRITERIA**: Recovers faces missed by full-frame detection before falling back to interpolation.
+- **FAILURE CONDITIONS**: If ROI inference too slow, batch or skip.
+- **ROLLBACK CONDITION**: Remove targeted inference.
 
 ### TASK-E02
 - **TITLE**: Mid-Track Gap Interpolation (GSI)
@@ -200,17 +187,17 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **DEPENDENCIES**: TASK-E01
 - **FILES TO MODIFY**: `core/gap_resolver.py`
 - **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: For each detected gap, apply Gaussian-Smoothed Interpolation between the last detection before the gap and the first detection after. Track uncertainty using hourglass profile. Validate with cycle consistency.
+- **IMPLEMENTATION DETAILS**: For remaining unresolved gaps after targeted re-observation, apply Gaussian-Smoothed Interpolation (GSI). Track uncertainty using hourglass profile. If GSI is invalid/fails cycle consistency, fall back to provisional protection.
 - **TESTS**: Test interpolation accuracy on known trajectories.
-- **BENCHMARK**: Interpolation error, privacy coverage.
-- **ACCEPTANCE CRITERIA**: Gap positions within 5px of true position for linear motion.
-- **FAILURE CONDITIONS**: If GSI complex, fall back to linear interpolation with uncertainty.
+- **BENCHMARK**: Privacy coverage, bbox IoU, center error (normalized by face size), privacy leakage frames, false redaction area.
+- **ACCEPTANCE CRITERIA**: GSI must measurably outperform current tracker prediction and linear interpolation on the hard-case corpus.
+- **FAILURE CONDITIONS**: If GSI fails to outperform linear, fall back to linear interpolation with uncertainty.
 - **ROLLBACK CONDITION**: Fill gaps with last-known position + expansion.
 
 ### TASK-E03
 - **TITLE**: Track-Start Backward Recovery
 - **PRIORITY**: P1
-- **DEPENDENCIES**: TASK-D03, TASK-E01
+- **DEPENDENCIES**: TASK-E01
 - **FILES TO MODIFY**: `core/gap_resolver.py`
 - **FILES TO CREATE**: None
 - **IMPLEMENTATION DETAILS**: When a track's first confirmed frame is not frame 0, search backward up to `max_backward_search` frames. For each backward frame, generate search ROI from forward-projected position + adaptive padding. Run targeted SCRFD. Validate with cycle consistency (forward-backward normalized error).
@@ -228,10 +215,10 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **DEPENDENCIES**: TASK-B01
 - **FILES TO MODIFY**: `core/redactor.py`
 - **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: Use tracker covariance matrix P to dynamically expand redaction region. `expansion = base_expansion + Z * sqrt(P)`, where Z=2.58 (99% confidence). Cap at 1.5x original size.
+- **IMPLEMENTATION DETAILS**: Compute covariance-derived confidence region -> convert ellipse to axis-aligned margin -> apply configurable confidence level -> clamp using experimentally derived expansion policy. Do not hardcode fixed Z values.
 - **TESTS**: Test expansion at various uncertainty levels.
 - **BENCHMARK**: Privacy coverage vs false redaction area.
-- **ACCEPTANCE CRITERIA**: Higher uncertainty = larger protection zone. Never exceeds 1.5x cap.
+- **ACCEPTANCE CRITERIA**: Higher uncertainty = larger protection zone, capped safely by experimental policy.
 - **FAILURE CONDITIONS**: If expansion too aggressive, reduce Z.
 - **ROLLBACK CONDITION**: Revert to fixed expansion.
 
