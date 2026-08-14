@@ -112,9 +112,9 @@ All numerical parameters are marked with their validation status:
 ### 2.3 Temporal Confirmation (Privacy focus)
 - **Research finding**: min_hits=1 for privacy [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Dropping confirmation to 1 frame yields +15-20% recall at <1% precision cost.
 - **→ implication**: Waiting for `min_hits=3` (current codebase state) leaks faces for 2 frames.
-- **→ architecture decision**: Change tracker state machine to confirm immediately or retroactively redact the tentative frames.
-- **→ implementation task**: Update tracker to use `min_hits=1` or buffer frames for retroactive redaction.
-- **→ validation experiment**: Frame-by-frame visual inspection to ensure no 1-frame face leaks exist.
+- **→ architecture decision**: Change tracker state machine to confirm immediately. The `TENTATIVE` state is bypassed/removed entirely.
+- **→ implementation task**: Update tracker to use `min_hits=1` and remove the `TENTATIVE` state.
+- **→ validation experiment**: Frame-by-frame visual inspection to ensure no 1-frame face leaks exist, and measure false positive rate.
 
 ---
 
@@ -190,11 +190,11 @@ All numerical parameters are marked with their validation status:
 - **→ validation experiment**: Ensure backward recovery does not paint masks on blank walls before a person enters the room.
 
 ### 4.3 Cycle Consistency
-- **Research finding**: Cycle consistency validation [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Forward-backward must land on same pixel. >1 pixel error = invalid.
-- **→ implication**: Backward tracking can drift onto background objects.
-- **→ architecture decision**: Validate backward recovered boxes by tracking them forward again.
-- **→ implementation task**: Implement forward-backward consistency check for recovered boxes.
-- **→ validation experiment**: Measure false positive rate of backward recovery with and without cycle consistency.
+- **Research finding**: Cycle consistency validation [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: Forward-backward validation must use a normalized metric (e.g. error / face_diagonal), not a rigid 1-pixel threshold.
+- **→ implication**: A rigid 1-pixel threshold will fail on large faces and high-resolution video.
+- **→ architecture decision**: Validate backward recovered boxes by tracking them forward again and computing a normalized error.
+- **→ implementation task**: Implement forward-backward consistency check with a tunable normalized threshold.
+- **→ validation experiment**: Measure false positive rate of backward recovery across different face scales.
 
 ---
 
@@ -209,11 +209,11 @@ All numerical parameters are marked with their validation status:
 **COMPUTATIONAL COST**: Medium (Image processing, video encoding).
 
 ### 5.1 Defeating AI Reconstruction
-- **Research finding**: Gaussian blur compromised [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: 95.9% re-ID. Pure pixelation vulnerable [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: CodeFormer can reconstruct. Mosaic + Gaussian noise disrupts latent mappings [HYPOTHESIS].
-- **→ implication**: Standard blur and pixelation are fundamentally insecure against modern AI.
-- **→ architecture decision**: Implement a compound redaction algorithm combining adaptive pixelation with additive noise.
-- **→ implementation task**: Update redactor to use `Mosaic + Gaussian Noise`.
-- **→ validation experiment**: Run CodeFormer/Revelio against redacted output and measure AdaFace similarity (<0.50 CelebA [B]).
+- **Research finding**: Gaussian blur compromised [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: 95.9% re-ID. Pure pixelation vulnerable [SUPPORTED BY LITERATURE NOT PV-VALIDATED]: CodeFormer can reconstruct. Mosaic + Gaussian noise disrupts latent mappings [HYPOTHESIS to be tested].
+- **→ implication**: Standard blur and pixelation are insecure against modern AI, but exact disruption mechanisms must be benchmarked.
+- **→ architecture decision**: Implement a compound redaction algorithm combining adaptive pixelation with additive noise as an experiment.
+- **→ implementation task**: Update redactor to test `Mosaic + Gaussian Noise`.
+- **→ validation experiment**: Run CodeFormer/Revelio against redacted output and measure AdaFace similarity (<0.50 CelebA [B]). Ensure visual artifacts don't degrade non-face regions.
 
 ### 5.2 Adaptive Pixelation
 - **Research finding**: Adaptive pixelation: Block size must scale with true head width. Adaptive pixelation scalar: 0.08 × W_head [B]. Base pixelation threshold: 16x16 pixels [B].

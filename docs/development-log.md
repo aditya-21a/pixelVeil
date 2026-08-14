@@ -235,3 +235,9 @@ Internal, chronological, short. One entry per session/significant change. This i
 - Key decisions: Boundary scanner for brand-new face problem (P0); GSI over RTS for gap filling; min_hits=1 for privacy; deferred TensorRT; simplified from 3-level tiling to boundary strips + targeted ROI.
 - No production code modified. Documentation only.
 - Commit: uncommitted
+
+## 2026-08-14 - Architecture documentation revision
+- Edited: docs/architecture-spec.md, docs/architecture-decisions.md, docs/architecture-diagrams.md, docs/new_arch_tasks.md, docs/research-to-architecture.md
+- Why: Implemented feedback from hostile review. Addressed over-claims and dogmatic thresholding (1px error, 20-frame limit, 1.5x cap). Shifted hardcoded "truths" to tunable experiments.
+- Key decisions: Confirmed 3-pass architecture (Detection, Offline Recovery, Redaction). Simplified state machine by dropping TENTATIVE state due to min_hits=1. Re-ordered roadmap to prioritize the Evaluation Framework (Phase P0).
+- No production code modified. Documentation only.

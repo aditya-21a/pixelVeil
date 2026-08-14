@@ -3,7 +3,7 @@
 This document contains the visual architecture of the PixelVeil pipeline, outlining the dual-pass processing, recovery mechanisms, and privacy safety layer.
 
 ## 1. High-Level Architecture
-The two-pass pipeline separating forward tracking and offline recovery.
+The three-pass pipeline strictly separating forward tracking, offline recovery, and redaction rendering.
 
 ```mermaid
 graph TD
@@ -13,23 +13,25 @@ graph TD
         C --> D[Candidate Validation]
         D --> E[Forward Tracker]
         E --> F[Track Analysis]
-        F --> G[Suspicion Detection]
+        F --> G[Record Evidence]
     end
-    G --> H{Suspicious?}
-    H -- Yes --> I[Queue for Recovery]
-    H -- No --> J[Pass 2: Offline Recovery & Redaction]
     
+    G --> H[Pass 2: Offline Recovery]
     subgraph Pass 2
-        I --> K[Suspicious Region ROI]
-        K --> L[Targeted SCRFD]
-        L --> M[Track Reconstruction]
-        M --> N[Gap Resolution]
+        H --> I[Suspicious Region ROI]
+        I --> J[Targeted SCRFD]
+        J --> K[Gap Resolution]
+        K --> L[Track-start Backward Search]
+        L --> M[Final Track Timeline]
     end
     
-    J --> O[Final: Privacy Safety Layer]
-    N --> O
-    O --> P[Adaptive Redaction]
-    P --> Q[Output Video]
+    M --> N[Pass 3: Redaction]
+    subgraph Pass 3
+        N --> O[Privacy Safety Layer]
+        O --> P[Adaptive Redaction]
+        P --> Q[Encode H.264]
+    end
+    Q --> R[Output Video]
 ```
 
 **WHY IT EXISTS:** Segregates real-time forward tracking from computationally intensive targeted recovery, ensuring efficiency while maintaining high recall.
@@ -42,13 +44,11 @@ The logic executed for every single frame during the forward pass.
 graph TD
     A[Frame Input] --> B[Decode]
     B --> C[Full-frame SCRFD 640x640]
-    C --> D[Basic geometric validation<br>size >= 20x20, aspect 0.5-2.0]
-    D --> E[Boundary strip detection<br>frame edges]
+    C --> D[Basic geometric assessment<br>tiny faces marked UNCERTAIN]
+    D --> E[Boundary strip detection policy]
     E --> F[Forward Kalman Tracker update]
     F --> G[Track state classification]
-    G --> H{State?}
-    H -- Suspicious --> I[Queue for targeted ROI recovery]
-    H -- Normal --> J[Continue to redaction]
+    G --> H[Record Evidence State]
 ```
 
 **INPUT:** Raw video frame.
@@ -93,23 +93,21 @@ graph TD
 **RESEARCH EVIDENCE:** Running inference on crops effectively increases resolution, recovering small faces that full-frame (640x640) downsizing obscures. (Validation: A)
 
 ## 5. Tracking State Machine
-Track lifecycle handling immediate confirmation for strict privacy.
+Track lifecycle handling immediate confirmation for strict privacy. The `TENTATIVE` state is bypassed/removed entirely since `min_hits=1`.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> NEW_DETECTION
-    NEW_DETECTION --> TENTATIVE
-    TENTATIVE --> CONFIRMED : min_hits=1 (Immediate for privacy)
-    TENTATIVE --> EXPIRED : missed
+    [*] --> NO_TRACK
+    NO_TRACK --> CONFIRMED : detection passes validation (min_hits=1)
     
     CONFIRMED --> CONFIRMED : detected
     CONFIRMED --> COASTING : missed
     
-    COASTING --> CONFIRMED : re-detected
+    COASTING --> CONFIRMED : re-detected or recovered
     COASTING --> EXPIRED : max_missing exceeded OR displacement exceeded OR off-screen
 ```
 
-**DECISION:** `min_hits=1` is chosen (Validation: C) because missing a face for even one frame violates the core privacy mandate, favoring false positives over false negatives.
+**DECISION:** `min_hits=1` is chosen because missing a face for even one frame violates the core privacy mandate, favoring false positives over false negatives. The state machine is thus simplified.
 
 ## 6. Mid-Track Gap Recovery (Offline)
 Interpolation and validation of missed detections between known track states.
@@ -143,7 +141,7 @@ graph TD
         I -- Yes --> J[Stop backward search]
         I -- No --> C
     end
-    G --> K[Cycle consistency validation<br>forward-backward must match within 1px]
+    G --> K[Cycle consistency validation<br>forward-backward normalized error]
 ```
 
 ## 8. Privacy/Redaction Pipeline
@@ -169,12 +167,12 @@ Hardware utilization split between GPU and CPU.
 
 ```mermaid
 graph TD
-    subgraph GPU Tasks
+    subgraph GPU_Tasks [GPU Tasks]
         A[SCRFD inference<br>full-frame + targeted ROI]
         B[Video decode<br>if hardware-accelerated]
     end
     
-    subgraph CPU Tasks
+    subgraph CPU_Tasks [CPU Tasks]
         C[Candidate validation]
         D[Kalman tracker update]
         E[Association Hungarian]
@@ -185,14 +183,14 @@ graph TD
         J[Video encoding ffmpeg]
     end
     
-    subgraph CPU-GPU Boundary
+    subgraph CPU_GPU_Boundary [CPU-GPU Boundary]
         K[Frame upload for SCRFD]
         L[Detection results download]
         M[ROI crops upload for targeted inference]
     end
     
-    GPU Tasks <--> CPU-GPU Boundary
-    CPU Tasks <--> CPU-GPU Boundary
+    GPU_Tasks <--> CPU_GPU_Boundary
+    CPU_Tasks <--> CPU_GPU_Boundary
 ```
 
 ## 10. Brand-New Face Problem Flow

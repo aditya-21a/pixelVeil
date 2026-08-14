@@ -2,22 +2,48 @@
 
 This document outlines the detailed implementation tasks for the PixelVeil architecture improvements. Tasks are ordered for sequential execution.
 
-## PHASE A: Foundation Improvements (No New Architecture)
+## PHASE P0: Foundation and Evaluation (No New Architecture)
 
-### TASK-A01
-- **TITLE**: Replace Branch-and-Bound with scipy.optimize.linear_sum_assignment
+### TASK-P01
+- **TITLE**: Create Evaluation Harness
 - **PRIORITY**: P0
 - **DEPENDENCIES**: None
+- **FILES TO MODIFY**: None
+- **FILES TO CREATE**: `tools/evaluate.py`, `tests/evaluation_corpus/`
+- **IMPLEMENTATION DETAILS**: Build the evaluation harness *before* changing architecture. Must measure bbox IoU, face-center error, coverage rate, privacy leakage frames, and false positive area.
+- **TESTS**: Unit tests for evaluation metrics.
+- **BENCHMARK**: N/A
+- **ACCEPTANCE CRITERIA**: Harness can run on a test video and output quantitative privacy and performance metrics.
+- **FAILURE CONDITIONS**: None.
+- **ROLLBACK CONDITION**: None.
+
+### TASK-P02
+- **TITLE**: Replace Branch-and-Bound with scipy.optimize.linear_sum_assignment
+- **PRIORITY**: P0
+- **DEPENDENCIES**: TASK-P01
 - **FILES TO MODIFY**: `core/face_tracker.py`
 - **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: The current `_linear_sum_assignment` is O(N!) recursive brute force. Replace with scipy's O(N^3) Hungarian implementation. This is a correctness/scalability fix.
-- **TESTS**: All existing tracker tests must pass. Add crowd test with 10+ faces.
+- **IMPLEMENTATION DETAILS**: The current `_linear_sum_assignment` is O(N!) recursive brute force. Replace with scipy's O(N^3) Hungarian implementation.
+- **TESTS**: All existing tracker tests must pass.
 - **BENCHMARK**: Measure association time with 1, 5, 10, 15 faces.
 - **ACCEPTANCE CRITERIA**: All tests pass, O(N^3) performance, identical results for <5 faces.
 - **FAILURE CONDITIONS**: If scipy not available, implement Munkres directly.
 - **ROLLBACK CONDITION**: Revert to branch-and-bound.
 
-### TASK-A02
+### TASK-P03
+- **TITLE**: Profile Current Pipeline
+- **PRIORITY**: P0
+- **DEPENDENCIES**: TASK-P01, TASK-P02
+- **FILES TO MODIFY**: None
+- **FILES TO CREATE**: None
+- **IMPLEMENTATION DETAILS**: Run the evaluation harness on the current pipeline to establish the baseline for recall, precision, and processing speed.
+- **TESTS**: N/A
+- **BENCHMARK**: Baseline metrics recorded.
+- **ACCEPTANCE CRITERIA**: Baseline established.
+- **FAILURE CONDITIONS**: N/A
+- **ROLLBACK CONDITION**: N/A
+
+### TASK-P04
 - **TITLE**: Eliminate Double Video Encoding
 - **PRIORITY**: P0
 - **DEPENDENCIES**: None
@@ -30,35 +56,22 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **FAILURE CONDITIONS**: If ffmpeg pipe fails, fall back to current double-encode.
 - **ROLLBACK CONDITION**: Revert to double encoding.
 
-### TASK-A03
-- **TITLE**: Privacy-Biased Track Confirmation (min_hits=1)
+### TASK-P05
+- **TITLE**: Implement Candidate Validation Instrumentation
 - **PRIORITY**: P0
-- **DEPENDENCIES**: None
-- **FILES TO MODIFY**: `core/face_tracker.py`, `core/video_pipeline.py`
+- **DEPENDENCIES**: TASK-P01
+- **FILES TO MODIFY**: `core/candidate_validator.py`
 - **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: Change default `min_hits_to_confirm` from 3 to 1. This means a single detection immediately creates a CONFIRMED track. Privacy rationale: current setting leaks first 2 frames of every new face. Add `min_hits_to_confirm` as a configurable parameter.
-- **TESTS**: Update tracker tests. Add test that single detection produces confirmed track.
-- **BENCHMARK**: Measure false positive increase.
-- **ACCEPTANCE CRITERIA**: First-frame redaction for all detected faces. No tentative gap.
-- **FAILURE CONDITIONS**: If false positive rate unacceptable, revert to min_hits=2.
-- **ROLLBACK CONDITION**: Set min_hits=3.
+- **IMPLEMENTATION DETAILS**: Add recall-biased geometric validation (e.g. marking <20px as UNCERTAIN rather than REJECT) and log validation outcomes.
+- **TESTS**: Unit tests for validation states.
+- **BENCHMARK**: False positive reduction rate vs recall.
+- **ACCEPTANCE CRITERIA**: Tiny faces are not blindly rejected; validation states are logged.
+- **FAILURE CONDITIONS**: N/A
+- **ROLLBACK CONDITION**: Revert to current logic.
 
-### TASK-A04
-- **TITLE**: Improve Redaction Effectiveness
-- **PRIORITY**: P1
-- **DEPENDENCIES**: None
-- **FILES TO MODIFY**: `core/redactor.py`
-- **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: Replace current pixelation formula (`cells_x = max(3, int(rw^0.35))`) with adaptive pixelation (`block_size = max(4, int(0.08 * head_width))`). Add optional Gaussian noise overlay to pixelated region. Ensure feathering is >= 16 pixels.
-- **TESTS**: Redaction tests. Visual verification of pixelation strength at various face sizes.
-- **BENCHMARK**: Measure re-identification resistance at various face sizes.
-- **ACCEPTANCE CRITERIA**: Small faces (20-40px) get strong pixelation. Large faces get proportionally larger blocks.
-- **FAILURE CONDITIONS**: If noise overlay causes visual artifacts, make it optional.
-- **ROLLBACK CONDITION**: Revert to current formula.
+## PHASE P1: Kalman Filter Tracker
 
-## PHASE B: Kalman Filter Tracker
-
-### TASK-B01
+### TASK-P1-1
 - **TITLE**: Implement Linear Kalman Filter
 - **PRIORITY**: P0
 - **DEPENDENCIES**: TASK-A01
@@ -71,7 +84,7 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **FAILURE CONDITIONS**: If Kalman diverges, add process noise tuning.
 - **ROLLBACK CONDITION**: Keep current tracker.
 
-### TASK-B02
+### TASK-P1-2
 - **TITLE**: Improved Association with Mahalanobis Gating
 - **PRIORITY**: P1
 - **DEPENDENCIES**: TASK-B01
@@ -84,18 +97,18 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **FAILURE CONDITIONS**: If Mahalanobis too aggressive, add fallback to IoU.
 - **ROLLBACK CONDITION**: Revert to current hard gates.
 
-### TASK-B03
-- **TITLE**: ByteTrack-style Two-Stage Association
+### TASK-P1-3
+- **TITLE**: Implement Canonical Association
 - **PRIORITY**: P1
-- **DEPENDENCIES**: TASK-B02
+- **DEPENDENCIES**: TASK-P1-2
 - **FILES TO MODIFY**: `core/face_tracker.py`
 - **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: Implement ByteTrack's key insight: first associate high-confidence detections, then associate remaining low-confidence detections with unmatched tracks. This recovers partially visible faces that would otherwise be missed.
+- **IMPLEMENTATION DETAILS**: Implement canonical association combining Linear Kalman prediction, Mahalanobis gating, IoU cost, and Hungarian assignment. Optionally, split by confidence thresholds to recover partially visible faces. Do not simply copy ByteTrack; tailor it and benchmark it against the baseline.
 - **TESTS**: Test with low-confidence detections. Test partial occlusion scenarios.
-- **BENCHMARK**: Recall improvement on difficult test videos.
-- **ACCEPTANCE CRITERIA**: Low-confidence detections properly associated with existing tracks.
-- **FAILURE CONDITIONS**: If false associations increase, tune confidence split threshold.
-- **ROLLBACK CONDITION**: Revert to single-stage association.
+- **BENCHMARK**: Recall improvement on difficult test videos vs baseline.
+- **ACCEPTANCE CRITERIA**: Low-confidence detections properly associated with existing tracks without excessive false tracks.
+- **FAILURE CONDITIONS**: If false associations increase, tune confidence split threshold or fallback to simpler association.
+- **ROLLBACK CONDITION**: Revert to single-stage or prior association.
 
 ## PHASE C: Candidate Validation
 
@@ -125,25 +138,25 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **FAILURE CONDITIONS**: If too aggressive, increase threshold.
 - **ROLLBACK CONDITION**: Remove motion validation.
 
-## PHASE D: Boundary and Suspicious Region Detection
+## PHASE P1-B: Boundary and Suspicious Region Detection
 
-### TASK-D01
-- **TITLE**: Boundary Strip Detection
-- **PRIORITY**: P0
-- **DEPENDENCIES**: TASK-B01
+### TASK-P1-4
+- **TITLE**: Boundary Strip Detection Policy
+- **PRIORITY**: P1
+- **DEPENDENCIES**: TASK-P1-1
 - **FILES TO MODIFY**: `core/video_pipeline.py`
 - **FILES TO CREATE**: `core/boundary_scanner.py`
-- **IMPLEMENTATION DETAILS**: On each frame, extract boundary strips (edges of frame, configurable width). Run SCRFD on these strips to catch faces entering the frame that full-frame detection misses due to zero-padding artifacts. Strip width: ~10% of frame dimension, configurable. Key insight: This is the PRIMARY mechanism for the brand-new face problem. Without a prior track, there is no way to know a face was missed except by proactively scanning likely entry points.
+- **IMPLEMENTATION DETAILS**: Implement configurable boundary scanning policies (e.g., 4 strips, 2 horizontal, 2 vertical, sampled). Benchmark compute cost vs edge-entry recall.
 - **TESTS**: Test with faces entering from each edge. Test performance impact.
-- **BENCHMARK**: Edge-entry face recall improvement.
-- **ACCEPTANCE CRITERIA**: Faces entering from edges detected within 1-2 frames.
+- **BENCHMARK**: Compute cost vs Edge-entry face recall.
+- **ACCEPTANCE CRITERIA**: Selected policy detects edge entries without blowing compute budget.
 - **FAILURE CONDITIONS**: If too slow, reduce strip width or scan frequency.
 - **ROLLBACK CONDITION**: Remove boundary scanning.
 
-### TASK-D02
+### TASK-P1-5
 - **TITLE**: Suspicious Region Classification
 - **PRIORITY**: P1
-- **DEPENDENCIES**: TASK-B01, TASK-D01
+- **DEPENDENCIES**: TASK-P1-4
 - **FILES TO MODIFY**: `core/video_pipeline.py`
 - **FILES TO CREATE**: `core/suspicion_detector.py`
 - **IMPLEMENTATION DETAILS**: Classify frames/regions as suspicious based on: track entering COASTING, boundary proximity, low confidence detection, rapid scale change. Queue suspicious regions for targeted ROI recovery.
@@ -200,11 +213,11 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **DEPENDENCIES**: TASK-D03, TASK-E01
 - **FILES TO MODIFY**: `core/gap_resolver.py`
 - **FILES TO CREATE**: None
-- **IMPLEMENTATION DETAILS**: When a track's first confirmed frame is not frame 0, search backward up to 20 frames. For each backward frame, generate search ROI from forward-projected position + adaptive padding. Run targeted SCRFD. Validate with cycle consistency (forward-backward < 1px error).
+- **IMPLEMENTATION DETAILS**: When a track's first confirmed frame is not frame 0, search backward up to `max_backward_search` frames. For each backward frame, generate search ROI from forward-projected position + adaptive padding. Run targeted SCRFD. Validate with cycle consistency (forward-backward normalized error).
 - **TESTS**: Test backward recovery on faces entering frame.
-- **BENCHMARK**: Recovery rate, backward search depth.
-- **ACCEPTANCE CRITERIA**: Recovers faces up to 10-20 frames before first detection.
-- **FAILURE CONDITIONS**: If cycle consistency too strict, relax to 2-3px.
+- **BENCHMARK**: Recovery rate vs compute cost, backward search depth.
+- **ACCEPTANCE CRITERIA**: Recovers faces effectively while meeting normalized error constraints.
+- **FAILURE CONDITIONS**: If cycle consistency too strict, tune the normalized error threshold.
 - **ROLLBACK CONDITION**: Skip backward recovery.
 
 ## PHASE F: Uncertainty-Aware Redaction
@@ -235,39 +248,4 @@ This document outlines the detailed implementation tasks for the PixelVeil archi
 - **FAILURE CONDITIONS**: If 30 frames insufficient, evaluate per-video.
 - **ROLLBACK CONDITION**: Revert to current max_missing=15.
 
-## PHASE G: Evaluation & Ablation
 
-### TASK-G01
-- **TITLE**: Create Evaluation Framework
-- **PRIORITY**: P0
-- **DEPENDENCIES**: None
-- **FILES TO MODIFY**: None
-- **FILES TO CREATE**: `tests/evaluation/eval_framework.py`, `tests/evaluation/metrics.py`
-- **IMPLEMENTATION DETAILS**: Create automated evaluation measuring: face recall, missed-face frames, longest unprotected run, privacy leakage frames, recovery success rate, false redaction area, track switches, track fragmentations, FPS, GPU utilization, VRAM usage.
-- **TESTS**: Self-test on synthetic videos.
-- **BENCHMARK**: N/A
-- **ACCEPTANCE CRITERIA**: Reproducible metrics on standard test videos.
-- **FAILURE CONDITIONS**: N/A
-- **ROLLBACK CONDITION**: N/A
-
-### TASK-G02
-- **TITLE**: Ablation Study
-- **PRIORITY**: P1
-- **DEPENDENCIES**: All implementation tasks
-- **FILES TO MODIFY**: None
-- **FILES TO CREATE**: `tests/evaluation/ablation.py`
-- **IMPLEMENTATION DETAILS**: Incrementally add each component and measure:
-  - BASELINE: SCRFD full-frame + current tracker + current redaction
-  - +A: Improved tracker (Kalman)
-  - +B: Candidate validation
-  - +C: Boundary scanning
-  - +D: Targeted ROI recovery
-  - +E: Mid-track gap interpolation
-  - +F: Backward recovery
-  - +G: Uncertainty-aware redaction
-  - FULL: All components
-- **TESTS**: N/A
-- **BENCHMARK**: N/A
-- **ACCEPTANCE CRITERIA**: Each addition shows measurable improvement on at least one metric.
-- **FAILURE CONDITIONS**: N/A
-- **ROLLBACK CONDITION**: N/A

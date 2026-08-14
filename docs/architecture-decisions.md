@@ -2,14 +2,14 @@
 
 This document records every major architectural decision with full justification.
 
-### DEC-01: SCRFD-500M as sole detector (no YuNet, no MediaPipe in production)
-**Decision**: Use SCRFD-500M only as the sole face detector.
-**Reason**: Need a highly reliable, robust, and performant detector to form the foundation of the pipeline. YuNet is currently broken (ISSUE-010) and MediaPipe misses angled faces (ISSUE-002).
-**Research evidence**: Phase 1 established SCRFD's superior WIDER FACE Hard AP. Local benchmark confirmed SCRFD CUDA ≈67 FPS, CPU ≈29.5 FPS.
-**Alternative considered**: YuNet, MediaPipe, or a multi-model ensemble.
-**Why alternative rejected**: YuNet is broken, MediaPipe provides poor coverage on angles, and an ensemble introduces unnecessary computational cost.
-**Confidence**: HIGH — experimentally validated on PixelVeil.
-**Open validation needed**: None for the core detector selection.
+### DEC-01: SCRFD-0.5GF / 500M as baseline detector (benchmark larger variants)
+**Decision**: Use SCRFD-0.5GF / 500M as the baseline face detector, but explicitly benchmark larger variants (e.g., SCRFD-2.5GF, SCRFD-10GF) against the PixelVeil corpus.
+**Reason**: SCRFD is highly reliable, but the assumption that 500M provides sufficient hard-face recall is unvalidated. Larger variants achieve >83% Hard AP in literature.
+**Research evidence**: Phase 1 established SCRFD-0.5GF achieves 68.5% WIDER FACE Hard AP.
+**Alternative considered**: Assuming 500M is sufficient, YuNet, or MediaPipe.
+**Why alternative rejected**: YuNet is broken, MediaPipe provides poor coverage on angles. Assuming 500M is sufficient contradicts the literature showing larger variants perform significantly better on hard cases.
+**Confidence**: HIGH for SCRFD family, LOW for 500M specifically.
+**Open validation needed**: Benchmark 0.5GF vs 2.5GF vs 10GF on PixelVeil hard-face corpus to determine the optimal recall/compute tradeoff.
 
 ### DEC-02: Selective ROI inference instead of full-frame SAHI
 **Decision**: Only run targeted high-resolution SCRFD on suspicious regions, NOT global tiling every frame.
@@ -29,13 +29,13 @@ This document records every major architectural decision with full justification
 **Confidence**: HIGH — literature strongly supports Kalman for this use case.
 **Open validation needed**: Parameter tuning for process/measurement noise matrices.
 
-### DEC-04: Two-pass architecture (detection pass + offline recovery pass)
-**Decision**: Pipeline will use two passes: Pass 1 does full-frame SCRFD + tracking. Pass 2 handles suspicious region recovery + gap filling.
-**Reason**: Separating detection from recovery allows complex spatial and temporal recovery heuristics to run without bottlenecking the main tracker logic.
+### DEC-04: Three-pass architecture (Detection, Recovery, Redaction)
+**Decision**: Pipeline will use exactly three passes: Pass 1 (Detection + Tracking), Pass 2 (Offline Recovery + Timeline Finalization), Pass 3 (Privacy Safety + Redaction).
+**Reason**: Strict separation of concerns. Pass 1 generates evidence. Pass 2 executes expensive targeted ROI and temporal recovery offline. Pass 3 renders the final redaction based on finalized evidence.
 **Research evidence**: Phase 5/6 establish offline recovery needs future evidence. Phase 7 confirms recovery can run at slower FPS offline.
-**Alternative considered**: Single-pass with inline recovery.
-**Why alternative rejected**: Inline recovery complicates state management and slows down the primary sequential processing unnecessarily.
-**Confidence**: MEDIUM — conceptually sound.
+**Alternative considered**: Single-pass with inline recovery, or two-pass blurring the line between detection and redaction.
+**Why alternative rejected**: Inline recovery complicates state management. Mixing recovery with tracking creates ambiguous states. A 3-pass architecture cleanly separates evidence from protection.
+**Confidence**: HIGH — conceptually sound for an offline privacy tool.
 **Open validation needed**: Recovery pass cost and disk I/O overhead have not been benchmarked.
 
 ### DEC-05: Boundary-region scanning for brand-new face problem
@@ -75,11 +75,11 @@ This document records every major architectural decision with full justification
 **Open validation needed**: Noise disruption efficacy is a hypothesis and not proven for PixelVeil.
 
 ### DEC-09: Privacy-biased confirmation (min_hits=1)
-**Decision**: Set min_hits_to_confirm=1. A single detection immediately creates a confirmed track that gets redacted.
-**Reason**: Prioritize absolute privacy. A delay in confirmation leaks frames.
+**Decision**: Set min_hits_to_confirm=1. Simplifies the state machine to: NO_TRACK -> CONFIRMED -> COASTING -> EXPIRED.
+**Reason**: Prioritize absolute privacy. A delay in confirmation leaks frames. The TENTATIVE state is redundant if min_hits=1.
 **Research evidence**: Phase 3 found min_hits=1 yields +15-20% recall at <1% precision cost. Current min_hits=3 means first 2 frames of a face are leaked.
-**Alternative considered**: min_hits=3 (current pipeline), min_hits=2.
-**Why alternative rejected**: Both alternatives explicitly leak frames before the track is confirmed.
+**Alternative considered**: min_hits=3 (current pipeline), min_hits=2, or keeping a TENTATIVE state.
+**Why alternative rejected**: Leaks frames before the track is confirmed. A TENTATIVE state without a specific purpose creates unnecessary complexity.
 **Confidence**: MEDIUM — literature-supported and privacy-critical.
 **Open validation needed**: May increase false positive tracks; false positive rate needs measurement.
 
